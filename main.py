@@ -121,7 +121,8 @@ async def main():
             logger.error(f"✗ {adapter.adapter_name} — no se pudo iniciar")
 
     if started == 0:
-        logger.warning("Ningún adaptador pudo iniciar — corriendo en modo dashboard.Ningún adaptador pudo iniciar.")
+        logger.error("Ningún adaptador pudo iniciar.")
+        sys.exit(1)
 
     logger.info(f"Sistema activo — {started}/{len(adapters)} adaptadores online")
     logger.info("Pipeline corriendo. Ctrl+C para detener.")

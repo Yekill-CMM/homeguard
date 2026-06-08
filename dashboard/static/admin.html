@@ -1212,34 +1212,37 @@ async function startScan() {
 
   resultsEl.innerHTML = '';
   progressEl.style.display = 'block';
-  progressBar.style.width = '30%';
-  progressMsg.textContent = 'Escaneando la red... esto puede tomar 20-30 segundos';
   startBtn.disabled = true;
   startBtn.textContent = 'Escaneando...';
 
-  // Animación de progreso mientras espera
-  let pct = 30;
-  const anim = setInterval(() => {
-    pct = Math.min(pct + 1, 90);
-    progressBar.style.width = pct + '%';
-  }, 500);
+  const url = `${API}/api/scanner/scan${subnet ? '?subnet='+encodeURIComponent(subnet) : ''}`;
+  const es = new EventSource(url);
+  scanController = es;
 
-  try {
-    const url = `${API}/api/scanner/scan${subnet ? '?subnet='+encodeURIComponent(subnet) : ''}`;
-    const data = await fetch(url).then(r => r.json());
-    clearInterval(anim);
-    progressBar.style.width = '100%';
-    progressMsg.textContent = `Escaneo completo — ${data.total} dispositivo(s) encontrado(s)`;
-    setTimeout(() => { progressEl.style.display = 'none'; }, 1500);
-    renderScanResults(data.devices || []);
-  } catch(e) {
-    clearInterval(anim);
+  es.onmessage = e => {
+    const data = JSON.parse(e.data);
+
+    if (data.type === 'progress') {
+      progressBar.style.width = data.percent + '%';
+      progressMsg.textContent = data.message;
+    }
+
+    if (data.type === 'result') {
+      es.close();
+      startBtn.disabled = false;
+      startBtn.textContent = '🔍 Escanear';
+      progressEl.style.display = 'none';
+      renderScanResults(data.devices);
+    }
+  };
+
+  es.onerror = () => {
+    es.close();
+    startBtn.disabled = false;
+    startBtn.textContent = '🔍 Escanear';
     progressEl.style.display = 'none';
-    resultsEl.innerHTML = `<div style="text-align:center;padding:30px;color:var(--red);font-family:var(--mono);font-size:12px">Error durante el escaneo — verifica que el servicio está corriendo</div>`;
-  }
-
-  startBtn.disabled = false;
-  startBtn.textContent = '🔍 Escanear';
+    resultsEl.innerHTML = `<div style="text-align:center;padding:30px;color:var(--red);font-family:var(--mono);font-size:12px">Error durante el escaneo</div>`;
+  };
 }
 
 function stopScan() {
