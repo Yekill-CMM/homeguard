@@ -184,10 +184,12 @@ class EventDatabase:
         hours: int = 24,
         limit: int = 100,
         offset: int = 0,
+        min_confidence: float = 0.0,
+        positive_only: bool = False,
     ) -> list[dict]:
         """
         Consulta eventos con filtros.
-        Por defecto retorna las últimas 24 horas.
+        positive_only=True: solo personas/vehículos con confianza >= 50%.
         """
         since = (datetime.now() - timedelta(hours=hours)).isoformat()
 
@@ -205,6 +207,14 @@ class EventDatabase:
             params.append(severity)
         if alerts_only:
             conditions.append("ai_alert = 1")
+        if min_confidence > 0:
+            conditions.append("confidence >= ?")
+            params.append(min_confidence)
+        if positive_only:
+            conditions.append(
+                "(event_type IN ('person','vehicle') AND confidence >= 0.5)"
+                " OR event_type IN ('intrusion','fire','gas','tamper')"
+            )
 
         where = " AND ".join(conditions)
         params += [limit, offset]

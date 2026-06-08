@@ -162,13 +162,18 @@ def create_app(db, port: int = 8000) -> FastAPI:
         event_type: Optional[str] = None,
         severity: Optional[str] = None,
         alerts_only: bool = False,
+        positive_only: bool = False,
+        min_confidence: float = 0.0,
         hours: int = Query(default=24, le=168),
         limit: int = Query(default=50, le=200),
         offset: int = 0,
     ):
-        return _db.get_events(camera_id=camera_id, event_type=event_type,
-                              severity=severity, alerts_only=alerts_only,
-                              hours=hours, limit=limit, offset=offset)
+        return _db.get_events(
+            camera_id=camera_id, event_type=event_type,
+            severity=severity, alerts_only=alerts_only,
+            positive_only=positive_only, min_confidence=min_confidence,
+            hours=hours, limit=limit, offset=offset,
+        )
 
     @app.get("/api/alerts")
     async def alerts(limit: int = Query(default=20, le=100)):
@@ -618,3 +623,40 @@ def add_scanner_routes(app: FastAPI, db):
             return device.to_dict()
         except Exception as e:
             return {"error": str(e), "ip": ip}
+
+
+def add_health_routes(app: FastAPI, core):
+    """Endpoints del monitor de salud del sistema."""
+
+    @app.get("/api/health/devices")
+    async def health_devices():
+        """Estado de salud de todos los dispositivos."""
+        monitor = getattr(core, 'health_monitor', None)
+        if not monitor:
+            return []
+        return monitor.get_status()
+
+    @app.get("/api/health/alerts")
+    async def health_alerts(limit: int = 50):
+        """Últimas alertas del monitor de salud."""
+        monitor = getattr(core, 'health_monitor', None)
+        if not monitor:
+            return []
+        return monitor.get_alerts(limit=limit)
+
+    @app.get("/api/health/summary")
+    async def health_summary():
+        """Resumen de salud del sistema."""
+        monitor = getattr(core, 'health_monitor', None)
+        if not monitor:
+            return {"total": 0, "online": 0, "offline": 0, "warning": 0}
+        devices = monitor.get_status()
+        online  = sum(1 for d in devices if d["online"])
+        offline = sum(1 for d in devices if not d["online"])
+        warning = sum(1 for d in devices if d["online"] and d["latency_ms"] > 300)
+        return {
+            "total":   len(devices),
+            "online":  online,
+            "offline": offline,
+            "warning": warning,
+        }

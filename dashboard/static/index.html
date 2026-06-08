@@ -617,9 +617,9 @@ header {
     <div class="logo-text">HOME<span>GUARD</span> AI</div>
   </div>
   <div class="header-status">
-    <div class="status-badge">
+    <div class="status-badge" id="health-badge" onclick="window.location.href='/admin#health'" style="cursor:pointer">
       <div class="status-dot"></div>
-      <span>SISTEMA ACTIVO</span>
+      <span id="health-text">SISTEMA ACTIVO</span>
     </div>
     <div class="clock" id="clock">--:--:--</div>
   </div>
@@ -693,6 +693,7 @@ header {
         <button class="btn primary" onclick="setHours(24)" id="btn-24h">24H</button>
         <button class="btn" onclick="setHours(168)">7D</button>
         <button class="btn" onclick="loadEvents()">↻ ACTUALIZAR</button>
+        <button class="btn primary" id="btn-positive" onclick="togglePositive()">👤 Solo positivos</button>
       </div>
     </div>
 
@@ -748,6 +749,7 @@ let currentFilter = 'all';
 let currentHours  = 24;
 let lastEventId   = null;
 let knownAlerts   = new Set();
+let positiveOnly  = true;  // Por defecto solo positivos >50%
 
 // ─── Utilidades ───────────────────────────────────────────────
 const $ = id => document.getElementById(id);
@@ -833,6 +835,7 @@ async function loadEvents() {
   let url = `${API}/api/events?hours=${currentHours}&limit=80`;
   if (currentFilter === 'alerts') url += '&alerts_only=true';
   else if (currentFilter !== 'all') url += `&event_type=${currentFilter}`;
+  if (positiveOnly) url += '&positive_only=true';
 
   try {
     const r = await fetch(url);
@@ -941,6 +944,19 @@ function showToast(alert) {
 }
 
 // ─── Filtros y navegación ─────────────────────────────────────
+function togglePositive() {
+  positiveOnly = !positiveOnly;
+  const btn = $('btn-positive');
+  if (positiveOnly) {
+    btn.classList.add('primary');
+    btn.textContent = '👤 Solo positivos';
+  } else {
+    btn.classList.remove('primary');
+    btn.textContent = '📋 Todos los eventos';
+  }
+  loadEvents();
+}
+
 function setFilter(f) {
   currentFilter = f;
   document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
@@ -1015,9 +1031,34 @@ function closeSnapshot() {
   document.getElementById('snapshot-img').src = '';
 }
 
-// ─── Auto-refresh ─────────────────────────────────────────────
+// ─── Monitor de salud ─────────────────────────────────────
+async function loadHealth() {
+  try {
+    const summary = await fetch(`${API}/api/health/summary`).then(r=>r.json());
+    const badge   = $('health-badge');
+    const text    = $('health-text');
+    const dot     = badge.querySelector('.status-dot');
+
+    if (summary.offline > 0) {
+      dot.style.background = 'var(--red)';
+      dot.style.boxShadow  = '0 0 6px var(--red)';
+      text.textContent = `⚠️ ${summary.offline} DISPOSITIVO(S) OFFLINE`;
+      badge.style.color = 'var(--red)';
+    } else if (summary.warning > 0) {
+      dot.style.background = 'var(--amber)';
+      dot.style.boxShadow  = '0 0 6px var(--amber)';
+      text.textContent = `⚡ ${summary.warning} CON LATENCIA`;
+      badge.style.color = 'var(--amber)';
+    } else {
+      dot.style.background = 'var(--green)';
+      dot.style.boxShadow  = '0 0 6px var(--green)';
+      text.textContent = `SISTEMA ACTIVO (${summary.online}/${summary.total})`;
+      badge.style.color = 'var(--green)';
+    }
+  } catch(e) {}
+}────
 async function refresh() {
-  await Promise.all([loadSummary(), loadAlerts()]);
+  await Promise.all([loadSummary(), loadAlerts(), loadHealth()]);
   await loadEvents();
 }
 
@@ -1027,6 +1068,7 @@ async function refresh() {
   await loadCameras();
   await loadEvents();
   await loadAlerts();
+  await loadHealth();
 })();
 
 // Refrescar cada 10 segundos

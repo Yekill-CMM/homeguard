@@ -611,6 +611,10 @@ header {
         <span class="nav-icon">📱</span> Dispositivos
         <span class="nav-count" id="cnt-devices">0</span>
       </button>
+      <button class="nav-item" onclick="showSection('health', this)" id="nav-health">
+        <span class="nav-icon">❤️</span> Salud sistema
+        <span class="nav-count" id="cnt-offline" style="background:rgba(255,59,59,.15);color:var(--red)">0</span>
+      </button>
     </div>
   </nav>
 
@@ -744,6 +748,45 @@ header {
       <div class="items-grid" id="devices-list"></div>
     </div>
 
+    <!-- SALUD DEL SISTEMA -->
+    <div class="section" id="section-health">
+      <div class="page-header">
+        <div>
+          <div class="page-title">SALUD DEL SISTEMA</div>
+          <div class="page-desc">Estado en tiempo real de todos los dispositivos</div>
+        </div>
+        <button class="btn" style="background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:10px 18px;cursor:pointer;font-family:var(--ui);font-size:14px" onclick="loadHealth()">↻ Actualizar</button>
+      </div>
+
+      <!-- Métricas de salud -->
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px" id="health-metrics">
+        <div class="metric-card">
+          <div class="metric-val c-accent" id="hm-total">—</div>
+          <div class="metric-lbl">Total</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-val c-green" id="hm-online">—</div>
+          <div class="metric-lbl">Online</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-val c-red" id="hm-offline">—</div>
+          <div class="metric-lbl">Offline</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-val c-amber" id="hm-warning">—</div>
+          <div class="metric-lbl">Latencia alta</div>
+        </div>
+      </div>
+
+      <!-- Lista de dispositivos con estado -->
+      <div class="section-title" style="margin-bottom:12px">DISPOSITIVOS MONITOREADOS</div>
+      <div class="items-grid" id="health-list"></div>
+
+      <!-- Alertas recientes -->
+      <div class="section-title" style="margin:20px 0 12px">ALERTAS RECIENTES</div>
+      <div class="items-grid" id="health-alerts-list"></div>
+    </div>
+
   </div>
 </div>
 
@@ -783,6 +826,7 @@ async function loadSection(name) {
   if (name === 'zones')     return loadZones();
   if (name === 'users')     return loadUsers();
   if (name === 'devices')   return loadDevices();
+  if (name === 'health')    return loadHealth();
 }
 
 // ─── Overview ─────────────────────────────────────────────
@@ -1212,37 +1256,34 @@ async function startScan() {
 
   resultsEl.innerHTML = '';
   progressEl.style.display = 'block';
+  progressBar.style.width = '30%';
+  progressMsg.textContent = 'Escaneando la red... esto puede tomar 20-30 segundos';
   startBtn.disabled = true;
   startBtn.textContent = 'Escaneando...';
 
-  const url = `${API}/api/scanner/scan${subnet ? '?subnet='+encodeURIComponent(subnet) : ''}`;
-  const es = new EventSource(url);
-  scanController = es;
+  // Animación de progreso mientras espera
+  let pct = 30;
+  const anim = setInterval(() => {
+    pct = Math.min(pct + 1, 90);
+    progressBar.style.width = pct + '%';
+  }, 500);
 
-  es.onmessage = e => {
-    const data = JSON.parse(e.data);
-
-    if (data.type === 'progress') {
-      progressBar.style.width = data.percent + '%';
-      progressMsg.textContent = data.message;
-    }
-
-    if (data.type === 'result') {
-      es.close();
-      startBtn.disabled = false;
-      startBtn.textContent = '🔍 Escanear';
-      progressEl.style.display = 'none';
-      renderScanResults(data.devices);
-    }
-  };
-
-  es.onerror = () => {
-    es.close();
-    startBtn.disabled = false;
-    startBtn.textContent = '🔍 Escanear';
+  try {
+    const url = `${API}/api/scanner/scan${subnet ? '?subnet='+encodeURIComponent(subnet) : ''}`;
+    const data = await fetch(url).then(r => r.json());
+    clearInterval(anim);
+    progressBar.style.width = '100%';
+    progressMsg.textContent = `Escaneo completo — ${data.total} dispositivo(s) encontrado(s)`;
+    setTimeout(() => { progressEl.style.display = 'none'; }, 1500);
+    renderScanResults(data.devices || []);
+  } catch(e) {
+    clearInterval(anim);
     progressEl.style.display = 'none';
-    resultsEl.innerHTML = `<div style="text-align:center;padding:30px;color:var(--red);font-family:var(--mono);font-size:12px">Error durante el escaneo</div>`;
-  };
+    resultsEl.innerHTML = `<div style="text-align:center;padding:30px;color:var(--red);font-family:var(--mono);font-size:12px">Error durante el escaneo — verifica que el servicio está corriendo</div>`;
+  }
+
+  startBtn.disabled = false;
+  startBtn.textContent = '🔍 Escanear';
 }
 
 function stopScan() {
@@ -1371,6 +1412,71 @@ function addSensorFromScan(device) {
     enabled: true,
   };
   openModal('sensor', prefilled);
+}
+
+// ─── Salud del sistema ─────────────────────────────────────
+async function loadHealth() {
+  try {
+    const [summary, devices, alerts] = await Promise.all([
+      fetch(`${API}/api/health/summary`).then(r=>r.json()),
+      fetch(`${API}/api/health/devices`).then(r=>r.json()),
+      fetch(`${API}/api/health/alerts?limit=20`).then(r=>r.json()),
+    ]);
+
+    // Métricas
+    document.getElementById('hm-total').textContent   = summary.total   ?? 0;
+    document.getElementById('hm-online').textContent  = summary.online  ?? 0;
+    document.getElementById('hm-offline').textContent = summary.offline ?? 0;
+    document.getElementById('hm-warning').textContent = summary.warning ?? 0;
+    document.getElementById('cnt-offline').textContent = summary.offline ?? 0;
+
+    // Dispositivos
+    const TYPE_ICONS = { camera:'📹', sensor:'📡', recorder:'🎬', router:'🌐', other:'🔌' };
+    const list = document.getElementById('health-list');
+    if (!devices.length) {
+      list.innerHTML = emptyState('❤️', 'Sin dispositivos monitoreados', 'Inicia el sistema para comenzar el monitoreo');
+    } else {
+      list.innerHTML = devices.map(d => {
+        const icon = TYPE_ICONS[d.device_type] || '🔌';
+        const statusColor = !d.online ? 'var(--red)' : d.latency_ms > 300 ? 'var(--amber)' : 'var(--green)';
+        const statusText  = !d.online ? 'OFFLINE' : d.latency_ms > 300 ? `${d.latency_ms}ms` : `${d.latency_ms}ms`;
+        const lastSeen    = d.last_seen ? new Date(d.last_seen).toLocaleTimeString('es-CL') : '—';
+        return `
+          <div class="item-card">
+            <div class="item-icon" style="background:rgba(0,0,0,.2)">${icon}</div>
+            <div class="item-info">
+              <div class="item-name">${d.device_name}</div>
+              <div class="item-detail">${d.host} · Último contacto: ${lastSeen}</div>
+            </div>
+            <div class="item-actions">
+              <span class="badge" style="color:${statusColor};border-color:${statusColor}20;background:${statusColor}15">
+                ${d.online ? '●' : '○'} ${statusText}
+              </span>
+              ${d.failures > 0 ? `<span class="badge badge-off">${d.failures} fallos</span>` : ''}
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+    // Alertas
+    const alertList = document.getElementById('health-alerts-list');
+    const ALERT_ICONS = { offline:'🔴', recovered:'🟢', high_latency:'🟡' };
+    if (!alerts.length) {
+      alertList.innerHTML = `<div class="empty-state"><div class="empty-icon">✅</div><div class="empty-title">Sin alertas recientes</div><div class="empty-desc">Todos los dispositivos operando normalmente</div></div>`;
+    } else {
+      alertList.innerHTML = alerts.map(a => `
+        <div class="item-card" style="border-left:3px solid ${a.alert_type==='offline'?'var(--red)':a.alert_type==='recovered'?'var(--green)':'var(--amber)'}">
+          <div class="item-icon" style="font-size:22px;background:none">${ALERT_ICONS[a.alert_type]||'⚠️'}</div>
+          <div class="item-info">
+            <div class="item-name">${a.message}</div>
+            <div class="item-detail">${new Date(a.timestamp).toLocaleString('es-CL')}</div>
+          </div>
+        </div>`).join('');
+    }
+
+  } catch(e) {
+    console.warn('Error cargando salud:', e);
+  }
 }
 
 // ─── Init ─────────────────────────────────────────────────
