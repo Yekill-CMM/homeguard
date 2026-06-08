@@ -1,0 +1,27 @@
+{
+  "name": "HomeGuard AI",
+  "short_name": "HomeGuard",
+  "description": "Sistema de seguridad residencial inteligente 24/7",
+  "start_url": "/mobile",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#080c10",
+  "theme_color": "#00d4ff",
+  "icons": [
+    {
+      "src": "/static/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/static/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [],
+  "categories": ["security", "utilities"],
+  "lang": "es"
+}

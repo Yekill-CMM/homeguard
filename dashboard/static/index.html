@@ -1,0 +1,1065 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HomeGuard AI — Centro de Monitoreo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;500;600;700&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+/* ─── Variables ─────────────────────────────────────────────── */
+:root {
+  --bg:       #080c10;
+  --surface:  #0d1318;
+  --panel:    #111820;
+  --border:   #1e2d3d;
+  --accent:   #00d4ff;
+  --green:    #00ff88;
+  --amber:    #ffb800;
+  --red:      #ff3b3b;
+  --purple:   #a78bfa;
+  --text:     #c8d8e8;
+  --muted:    #4a6070;
+  --font-mono: 'Share Tech Mono', monospace;
+  --font-ui:   'Rajdhani', sans-serif;
+  --font-body: 'Inter', sans-serif;
+}
+
+/* ─── Reset & Base ──────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 14px;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Scanline overlay sutil */
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,212,255,0.015) 2px,
+    rgba(0,212,255,0.015) 4px
+  );
+  pointer-events: none;
+  z-index: 1000;
+}
+
+/* ─── Header ────────────────────────────────────────────────── */
+header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0 24px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky; top: 0;
+  z-index: 100;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logo-icon {
+  width: 32px; height: 32px;
+  border: 2px solid var(--accent);
+  border-radius: 4px;
+  display: flex; align-items: center; justify-content: center;
+  position: relative;
+  animation: pulse-border 3s ease-in-out infinite;
+}
+
+@keyframes pulse-border {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(0,212,255,0.4); }
+  50%       { box-shadow: 0 0 0 6px rgba(0,212,255,0); }
+}
+
+.logo-icon svg { width: 18px; height: 18px; fill: var(--accent); }
+
+.logo-text {
+  font-family: var(--font-ui);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: #fff;
+}
+
+.logo-text span { color: var(--accent); }
+
+.header-status {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.status-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--green);
+}
+
+.status-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--green);
+  animation: blink 2s ease-in-out infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+
+.clock {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--muted);
+  letter-spacing: 1px;
+}
+
+/* ─── Layout ────────────────────────────────────────────────── */
+.layout {
+  display: grid;
+  grid-template-columns: 260px 1fr 300px;
+  height: calc(100vh - 56px);
+}
+
+/* ─── Sidebar izquierdo ─────────────────────────────────────── */
+.sidebar {
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  padding: 16px;
+  gap: 16px;
+}
+
+.section-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: var(--muted);
+  text-transform: uppercase;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+
+/* Métricas rápidas */
+.metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.metric {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px 10px;
+  text-align: center;
+  transition: border-color 0.2s;
+}
+
+.metric:hover { border-color: var(--accent); }
+
+.metric-value {
+  font-family: var(--font-ui);
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.metric-label {
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.v-accent  { color: var(--accent); }
+.v-green   { color: var(--green); }
+.v-amber   { color: var(--amber); }
+.v-red     { color: var(--red); }
+
+/* Cámaras */
+.camera-list { display: flex; flex-direction: column; gap: 6px; }
+
+.camera-item {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.camera-item:hover, .camera-item.active {
+  border-color: var(--accent);
+  background: rgba(0,212,255,0.05);
+}
+
+.cam-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+}
+.cam-dot.online  { background: var(--green); box-shadow: 0 0 6px var(--green); }
+.cam-dot.offline { background: var(--muted); }
+
+.cam-name {
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-weight: 600;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cam-count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* Filtros */
+.filters { display: flex; flex-direction: column; gap: 6px; }
+
+.filter-btn {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 12px;
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.filter-btn:hover { border-color: var(--accent); color: var(--accent); }
+.filter-btn.active { border-color: var(--accent); background: rgba(0,212,255,0.08); color: var(--accent); }
+
+.filter-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+}
+
+/* ─── Centro — Feed de eventos ──────────────────────────────── */
+.main {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.main-toolbar {
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--surface);
+}
+
+.toolbar-title {
+  font-family: var(--font-ui);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+
+.toolbar-actions { display: flex; gap: 8px; }
+
+.btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 14px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s;
+  letter-spacing: 1px;
+}
+
+.btn:hover { border-color: var(--accent); color: var(--accent); }
+.btn.primary { border-color: var(--accent); color: var(--accent); }
+
+.events-feed {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Scrollbar */
+.events-feed::-webkit-scrollbar { width: 4px; }
+.events-feed::-webkit-scrollbar-track { background: transparent; }
+.events-feed::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* Evento individual */
+.event-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 16px;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 12px;
+  align-items: center;
+  transition: all 0.15s;
+  animation: slideIn 0.3s ease-out;
+  cursor: pointer;
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(-10px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.event-card:hover { border-color: var(--accent); background: rgba(0,212,255,0.03); }
+.event-card.alert { border-left: 3px solid var(--red); }
+.event-card.medium { border-left: 3px solid var(--amber); }
+.event-card.low { border-left: 3px solid var(--border); }
+
+.event-icon {
+  width: 36px; height: 36px;
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.event-icon.person   { background: rgba(0,212,255,0.12); }
+.event-icon.vehicle  { background: rgba(167,139,250,0.12); }
+.event-icon.animal   { background: rgba(0,255,136,0.12); }
+.event-icon.motion   { background: rgba(255,184,0,0.12); }
+.event-icon.fire     { background: rgba(255,59,59,0.2); }
+.event-icon.intrusion{ background: rgba(255,59,59,0.2); }
+.event-icon.no_threat{ background: rgba(74,96,112,0.2); }
+.event-icon.unknown  { background: rgba(74,96,112,0.2); }
+
+.event-body { min-width: 0; }
+
+.event-title {
+  font-family: var(--font-ui);
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 3px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.event-desc {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.alert-badge {
+  background: var(--red);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  letter-spacing: 1px;
+}
+
+.event-meta {
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.event-time {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.event-cam {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.confidence {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  border: 1px solid;
+}
+
+.conf-high  { color: var(--green);  border-color: var(--green); }
+.conf-med   { color: var(--amber);  border-color: var(--amber); }
+.conf-low   { color: var(--muted);  border-color: var(--muted); }
+
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--muted);
+}
+
+.empty-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.4; }
+.empty-text { font-family: var(--font-mono); font-size: 13px; }
+
+/* ─── Panel derecho — Alertas ───────────────────────────────── */
+.alerts-panel {
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.alerts-header {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.alerts-title {
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.alert-count {
+  background: var(--red);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 10px;
+  min-width: 20px;
+  text-align: center;
+}
+
+.alerts-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.alerts-list::-webkit-scrollbar { width: 3px; }
+.alerts-list::-webkit-scrollbar-thumb { background: var(--border); }
+
+.alert-item {
+  background: var(--panel);
+  border: 1px solid rgba(255,59,59,0.3);
+  border-radius: 6px;
+  padding: 10px 12px;
+  animation: slideIn 0.3s ease-out;
+}
+
+.alert-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.alert-type {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--red);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.alert-time {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.alert-cam {
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.alert-reason {
+  font-size: 12px;
+  color: var(--text);
+  opacity: 0.8;
+}
+
+/* ─── Stats bar ─────────────────────────────────────────────── */
+.stats-bar {
+  border-top: 1px solid var(--border);
+  padding: 12px 16px;
+  background: var(--panel);
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.stat-item { text-align: center; }
+
+.stat-num {
+  font-family: var(--font-ui);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.stat-lbl {
+  font-size: 9px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-top: 2px;
+}
+
+/* ─── Toast de nueva alerta ─────────────────────────────────── */
+.toast {
+  position: fixed;
+  bottom: 24px; right: 24px;
+  background: var(--panel);
+  border: 1px solid var(--red);
+  border-radius: 8px;
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  z-index: 9999;
+  box-shadow: 0 0 20px rgba(255,59,59,0.3);
+  animation: toastIn 0.3s ease-out;
+  max-width: 320px;
+}
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.toast-icon { font-size: 24px; }
+
+.toast-body { flex: 1; min-width: 0; }
+
+.toast-title {
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--red);
+  margin-bottom: 2px;
+}
+
+.toast-msg {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.toast-close {
+  background: none; border: none;
+  color: var(--muted); cursor: pointer;
+  font-size: 18px; padding: 0;
+}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">
+      <svg viewBox="0 0 24 24"><path d="M12 2L4 6v6c0 5.25 3.5 10.15 8 11.35C16.5 22.15 20 17.25 20 12V6l-8-4z"/></svg>
+    </div>
+    <div class="logo-text">HOME<span>GUARD</span> AI</div>
+  </div>
+  <div class="header-status">
+    <div class="status-badge">
+      <div class="status-dot"></div>
+      <span>SISTEMA ACTIVO</span>
+    </div>
+    <div class="clock" id="clock">--:--:--</div>
+  </div>
+</header>
+
+<!-- LAYOUT PRINCIPAL -->
+<div class="layout">
+
+  <!-- SIDEBAR IZQUIERDO -->
+  <aside class="sidebar">
+    <div>
+      <div class="section-label">métricas — hoy</div>
+      <div class="metrics">
+        <div class="metric">
+          <div class="metric-value v-accent" id="m-today">—</div>
+          <div class="metric-label">Eventos</div>
+        </div>
+        <div class="metric">
+          <div class="metric-value v-red" id="m-alerts">—</div>
+          <div class="metric-label">Alertas</div>
+        </div>
+        <div class="metric">
+          <div class="metric-value v-green" id="m-total">—</div>
+          <div class="metric-label">Total</div>
+        </div>
+        <div class="metric">
+          <div class="metric-value v-amber" id="m-cams">—</div>
+          <div class="metric-label">Cámaras</div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-label">cámaras</div>
+      <div class="camera-list" id="camera-list">
+        <div class="camera-item">
+          <div class="cam-dot offline"></div>
+          <div class="cam-name">Cargando...</div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-label">filtros</div>
+      <div class="filters">
+        <button class="filter-btn active" onclick="setFilter('all')">
+          <div class="filter-dot" style="background:var(--muted)"></div> Todos los eventos
+        </button>
+        <button class="filter-btn" onclick="setFilter('person')">
+          <div class="filter-dot" style="background:var(--accent)"></div> Personas
+        </button>
+        <button class="filter-btn" onclick="setFilter('vehicle')">
+          <div class="filter-dot" style="background:var(--purple)"></div> Vehículos
+        </button>
+        <button class="filter-btn" onclick="setFilter('intrusion')">
+          <div class="filter-dot" style="background:var(--red)"></div> Intrusiones
+        </button>
+        <button class="filter-btn" onclick="setFilter('alerts')">
+          <div class="filter-dot" style="background:var(--red)"></div> Solo alertas
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- FEED CENTRAL -->
+  <main class="main">
+    <div class="main-toolbar">
+      <div class="toolbar-title">FEED DE EVENTOS</div>
+      <div class="toolbar-actions">
+        <button class="btn" onclick="setHours(1)">1H</button>
+        <button class="btn primary" onclick="setHours(24)" id="btn-24h">24H</button>
+        <button class="btn" onclick="setHours(168)">7D</button>
+        <button class="btn" onclick="loadEvents()">↻ ACTUALIZAR</button>
+      </div>
+    </div>
+
+    <div class="events-feed" id="events-feed">
+      <div class="empty-state">
+        <div class="empty-icon">📡</div>
+        <div class="empty-text">Cargando eventos...</div>
+      </div>
+    </div>
+  </main>
+
+  <!-- PANEL DE ALERTAS -->
+  <aside class="alerts-panel">
+    <div class="alerts-header">
+      <div class="alerts-title">
+        🚨 ALERTAS
+        <span class="alert-count" id="alert-count">0</span>
+      </div>
+    </div>
+    <div class="alerts-list" id="alerts-list">
+      <div style="text-align:center; padding:30px; color:var(--muted); font-family:var(--font-mono); font-size:12px;">
+        Sin alertas activas
+      </div>
+    </div>
+    <div class="stats-bar">
+      <div class="section-label" style="margin-bottom:8px">últimas 24h</div>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <div class="stat-num v-accent" id="s-persons">0</div>
+          <div class="stat-lbl">Personas</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-num v-purple" id="s-vehicles">0</div>
+          <div class="stat-lbl">Vehículos</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-num v-green" id="s-animals">0</div>
+          <div class="stat-lbl">Animales</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-num v-amber" id="s-false">0</div>
+          <div class="stat-lbl">F.Alarma</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<script>
+// ─── Estado ──────────────────────────────────────────────────
+const API = '';  // mismo origen — FastAPI en :8000
+let currentFilter = 'all';
+let currentHours  = 24;
+let lastEventId   = null;
+let knownAlerts   = new Set();
+
+// ─── Utilidades ───────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+
+function formatTime(iso) {
+  const d = new Date(iso);
+  return d.toLocaleTimeString('es-CL', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+}
+
+function formatDate(iso) {
+  const d = new Date(iso);
+  return d.toLocaleDateString('es-CL', { day:'2-digit', month:'2-digit' });
+}
+
+const ICONS = {
+  person:    '👤',
+  vehicle:   '🚗',
+  animal:    '🐾',
+  motion:    '📡',
+  fire:      '🔥',
+  gas:       '💨',
+  intrusion: '⚠️',
+  access:    '🔑',
+  tamper:    '🎥',
+  no_threat: '✓',
+  unknown:   '?',
+};
+
+const LABELS = {
+  person: 'Persona detectada', vehicle: 'Vehículo detectado',
+  animal: 'Animal detectado',  motion:  'Movimiento',
+  fire:   'INCENDIO',          gas:     'GAS DETECTADO',
+  intrusion: 'INTRUSIÓN',      access:  'Control de acceso',
+  tamper: 'Manipulación',      no_threat: 'Sin amenaza',
+  unknown: 'Sin clasificar',
+};
+
+function confClass(c) {
+  if (c >= 0.85) return 'conf-high';
+  if (c >= 0.6)  return 'conf-med';
+  return 'conf-low';
+}
+
+// ─── Reloj ────────────────────────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  $('clock').textContent = now.toLocaleTimeString('es-CL', { hour12: false });
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ─── Cargar métricas ─────────────────────────────────────────
+async function loadSummary() {
+  try {
+    const r = await fetch(`${API}/api/summary`);
+    const d = await r.json();
+    $('m-today').textContent  = d.today_events ?? 0;
+    $('m-alerts').textContent = d.total_alerts ?? 0;
+    $('m-total').textContent  = d.total_events ?? 0;
+  } catch(e) { console.warn('summary:', e); }
+}
+
+// ─── Cargar cámaras ──────────────────────────────────────────
+async function loadCameras() {
+  try {
+    const r = await fetch(`${API}/api/cameras`);
+    const cams = await r.json();
+    $('m-cams').textContent = cams.length;
+    const list = $('camera-list');
+    if (!cams.length) { list.innerHTML = '<div class="camera-item"><div class="cam-dot offline"></div><div class="cam-name">Sin cámaras</div></div>'; return; }
+    list.innerHTML = cams.map(c => `
+      <div class="camera-item" onclick="filterByCamera('${c.id}')">
+        <div class="cam-dot ${c.enabled ? 'online' : 'offline'}"></div>
+        <div class="cam-name">${c.name}</div>
+        <div class="cam-count">${c.source_type}</div>
+      </div>
+    `).join('');
+  } catch(e) { console.warn('cameras:', e); }
+}
+
+// ─── Cargar eventos ───────────────────────────────────────────
+async function loadEvents() {
+  let url = `${API}/api/events?hours=${currentHours}&limit=80`;
+  if (currentFilter === 'alerts') url += '&alerts_only=true';
+  else if (currentFilter !== 'all') url += `&event_type=${currentFilter}`;
+
+  try {
+    const r = await fetch(url);
+    const events = await r.json();
+    renderEvents(events);
+  } catch(e) {
+    $('events-feed').innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-text">Error conectando con el servidor</div></div>`;
+  }
+}
+
+function renderEvents(events) {
+  const feed = $('events-feed');
+  if (!events.length) {
+    feed.innerHTML = `<div class="empty-state"><div class="empty-icon">📡</div><div class="empty-text">Sin eventos en el período seleccionado</div></div>`;
+    return;
+  }
+
+  // Stats rápidas del panel derecho
+  let persons=0, vehicles=0, animals=0, falseAlarms=0;
+  events.forEach(e => {
+    if (e.event_type === 'person')    persons++;
+    if (e.event_type === 'vehicle')   vehicles++;
+    if (e.event_type === 'animal')    animals++;
+    if (e.event_type === 'no_threat') falseAlarms++;
+  });
+  $('s-persons').textContent  = persons;
+  $('s-vehicles').textContent = vehicles;
+  $('s-animals').textContent  = animals;
+  $('s-false').textContent    = falseAlarms;
+
+  feed.innerHTML = events.map(e => {
+    const isAlert = e.ai_alert === 1;
+    const conf    = e.confidence ?? 0;
+    const icon    = ICONS[e.event_type] ?? '?';
+    const label   = LABELS[e.event_type] ?? e.event_type;
+    const cardClass = isAlert ? 'alert' : (e.severity === 'medium' ? 'medium' : 'low');
+
+    return `
+      <div class="event-card ${cardClass}" onclick="showDetail('${e.id}')">
+        <div class="event-icon ${e.event_type}">${icon}</div>
+        <div class="event-body">
+          <div class="event-title">
+            ${label}
+            ${isAlert ? '<span class="alert-badge">ALERTA</span>' : ''}
+          </div>
+          <div class="event-desc">${e.ai_description || e.camera_name || '—'}</div>
+        </div>
+        <div class="event-meta">
+          <div class="event-time">${formatTime(e.timestamp)}</div>
+          <div class="event-cam">${e.camera_name}</div>
+          ${conf > 0 ? `<div class="confidence ${confClass(conf)}">${Math.round(conf*100)}%</div>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// ─── Cargar alertas ───────────────────────────────────────────
+async function loadAlerts() {
+  try {
+    const r = await fetch(`${API}/api/alerts?limit=30`);
+    const alerts = await r.json();
+
+    $('alert-count').textContent = alerts.length;
+
+    if (!alerts.length) {
+      $('alerts-list').innerHTML = `<div style="text-align:center;padding:30px;color:var(--muted);font-family:var(--font-mono);font-size:12px;">Sin alertas activas</div>`;
+      return;
+    }
+
+    // Detectar alertas nuevas para toast
+    alerts.forEach(a => {
+      if (!knownAlerts.has(a.id)) {
+        knownAlerts.add(a.id);
+        if (knownAlerts.size > 1) showToast(a); // No mostrar en carga inicial
+      }
+    });
+
+    $('alerts-list').innerHTML = alerts.map(a => `
+      <div class="alert-item">
+        <div class="alert-item-header">
+          <div class="alert-type">⚠️ ${LABELS[a.event_type] ?? a.event_type}</div>
+          <div class="alert-time">${formatTime(a.timestamp)}</div>
+        </div>
+        <div class="alert-cam">📹 ${a.camera_name}</div>
+        <div class="alert-reason">${a.ai_alert_reason ?? a.ai_description ?? '—'}</div>
+      </div>
+    `).join('');
+  } catch(e) { console.warn('alerts:', e); }
+}
+
+// ─── Toast de nueva alerta ────────────────────────────────────
+function showToast(alert) {
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.innerHTML = `
+    <div class="toast-icon">🚨</div>
+    <div class="toast-body">
+      <div class="toast-title">ALERTA — ${LABELS[alert.event_type] ?? alert.event_type}</div>
+      <div class="toast-msg">${alert.camera_name}: ${alert.ai_alert_reason ?? ''}</div>
+    </div>
+    <button class="toast-close" onclick="this.parentElement.remove()">✕</button>
+  `;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 8000);
+}
+
+// ─── Filtros y navegación ─────────────────────────────────────
+function setFilter(f) {
+  currentFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  event.target.closest('.filter-btn').classList.add('active');
+  loadEvents();
+}
+
+function setHours(h) {
+  currentHours = h;
+  document.querySelectorAll('.toolbar-actions .btn').forEach(b => b.classList.remove('primary'));
+  event.target.classList.add('primary');
+  loadEvents();
+}
+
+function filterByCamera(id) {
+  document.querySelectorAll('.camera-item').forEach(c => c.classList.remove('active'));
+  event.target.closest('.camera-item').classList.add('active');
+  // Cargar eventos filtrados por cámara
+  fetch(`${API}/api/events?camera_id=${id}&hours=${currentHours}&limit=80`)
+    .then(r => r.json()).then(renderEvents);
+}
+
+function showDetail(id) {
+  fetch(`${API}/api/events/${id}`)
+    .then(r => r.json())
+    .then(e => {
+      const modal = document.getElementById('snapshot-modal');
+      const img   = document.getElementById('snapshot-img');
+      const info  = document.getElementById('snapshot-info');
+
+      // Cargar imagen
+      img.src = `${API}/api/events/${id}/snapshot?t=${Date.now()}`;
+      img.onerror = () => {
+        img.style.display = 'none';
+        document.getElementById('snapshot-noimg').style.display = 'block';
+      };
+      img.onload = () => {
+        img.style.display = 'block';
+        document.getElementById('snapshot-noimg').style.display = 'none';
+      };
+
+      // Info del evento
+      const conf = e.confidence ? Math.round(e.confidence * 100) + '%' : '—';
+      const src  = e.source_type === 'edge' ? '📡 Edge analytics' : '🎞️ Stream local';
+      info.innerHTML = `
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-family:var(--font-mono);font-size:12px">
+          <div><span style="color:var(--muted)">Cámara</span><br>${e.camera_name}</div>
+          <div><span style="color:var(--muted)">Hora</span><br>${formatTime(e.timestamp)}</div>
+          <div><span style="color:var(--muted)">Tipo</span><br>${LABELS[e.event_type] ?? e.event_type}</div>
+          <div><span style="color:var(--muted)">Confianza</span><br>${conf}</div>
+          <div><span style="color:var(--muted)">Fuente</span><br>${src}</div>
+          <div><span style="color:var(--muted)">Severidad</span><br>${e.severity ?? '—'}</div>
+        </div>
+        ${e.ai_description ? `<div style="margin-top:10px;font-size:13px;color:var(--text)">${e.ai_description}</div>` : ''}
+        ${e.ai_alert_reason ? `<div style="margin-top:6px;font-size:12px;color:var(--red)">⚠️ ${e.ai_alert_reason}</div>` : ''}
+      `;
+
+      // Link de descarga
+      const dl = document.getElementById('snapshot-download');
+      dl.href = `${API}/api/events/${id}/snapshot`;
+      dl.download = `homeguard_${id.slice(0,8)}_${e.event_type}.jpg`;
+
+      modal.style.display = 'flex';
+      modal.classList.add('open');
+    });
+}
+
+function closeSnapshot() {
+  const modal = document.getElementById('snapshot-modal');
+  modal.style.display = 'none';
+  modal.classList.remove('open');
+  document.getElementById('snapshot-img').src = '';
+}
+
+// ─── Auto-refresh ─────────────────────────────────────────────
+async function refresh() {
+  await Promise.all([loadSummary(), loadAlerts()]);
+  await loadEvents();
+}
+
+// Inicialización
+(async () => {
+  await loadSummary();
+  await loadCameras();
+  await loadEvents();
+  await loadAlerts();
+})();
+
+// Refrescar cada 10 segundos
+setInterval(refresh, 10000);
+</script>
+<!-- MODAL SNAPSHOT -->
+<div id="snapshot-modal" class="modal-bg" onclick="if(event.target===this)closeSnapshot()" style="display:none;position:fixed;inset:0;background:rgba(8,12,16,.9);z-index:2000;align-items:center;justify-content:center;padding:20px">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;width:100%;max-width:780px;overflow:hidden">
+
+    <!-- Header -->
+    <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+      <div style="font-family:var(--font-ui);font-size:16px;font-weight:700;letter-spacing:1px">📸 SNAPSHOT DEL EVENTO</div>
+      <button onclick="closeSnapshot()" style="width:30px;height:30px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:16px;cursor:pointer">✕</button>
+    </div>
+
+    <!-- Imagen -->
+    <div style="background:#000;position:relative;min-height:200px;display:flex;align-items:center;justify-content:center">
+      <img id="snapshot-img" style="max-width:100%;max-height:480px;display:none">
+      <div id="snapshot-noimg" style="color:var(--muted);font-family:var(--font-mono);font-size:13px;padding:40px;text-align:center;display:none">
+        📷 Sin snapshot disponible para este evento
+      </div>
+    </div>
+
+    <!-- Info -->
+    <div id="snapshot-info" style="padding:16px 20px;border-top:1px solid var(--border)"></div>
+
+    <!-- Acciones -->
+    <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px">
+      <a id="snapshot-download" href="#" download style="background:var(--accent);color:#080c10;border:none;border-radius:6px;padding:8px 16px;font-family:var(--font-ui);font-size:13px;font-weight:700;cursor:pointer;text-decoration:none">⬇ Descargar</a>
+      <button onclick="closeSnapshot()" style="background:transparent;color:var(--muted);border:1px solid var(--border);border-radius:6px;padding:8px 16px;font-family:var(--font-mono);font-size:11px;cursor:pointer">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,1437 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>HomeGuard — Administración</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ─── Variables ─────────────────────────────────────────── */
+:root {
+  --bg:       #07090e;
+  --s1:       #0c1019;
+  --s2:       #111722;
+  --s3:       #18212e;
+  --border:   #1f2d3d;
+  --border2:  #2a3d52;
+  --accent:   #00e5ff;
+  --accent2:  #0099bb;
+  --green:    #00e676;
+  --amber:    #ffc107;
+  --red:      #ff1744;
+  --purple:   #b39ddb;
+  --text:     #d0e4f4;
+  --muted:    #4a6070;
+  --muted2:   #2a3d52;
+  --orb:      'Orbitron', monospace;
+  --sans:     'DM Sans', sans-serif;
+  --mono:     'JetBrains Mono', monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 14px;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Grid noise texture */
+body::after {
+  content: '';
+  position: fixed; inset: 0;
+  background-image:
+    linear-gradient(rgba(0,229,255,.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,229,255,.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ─── Header ────────────────────────────────────────────── */
+header {
+  background: var(--s1);
+  border-bottom: 1px solid var(--border);
+  padding: 0 28px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky; top: 0; z-index: 100;
+}
+
+.logo {
+  display: flex; align-items: center; gap: 14px;
+}
+
+.logo-mark {
+  width: 36px; height: 36px;
+  background: linear-gradient(135deg, var(--accent2), var(--accent));
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px;
+}
+
+.logo-text {
+  font-family: var(--orb);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  color: #fff;
+}
+.logo-text em { color: var(--accent); font-style: normal; }
+
+.logo-sub {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 2px;
+  margin-top: 1px;
+}
+
+.header-right {
+  display: flex; align-items: center; gap: 16px;
+}
+
+.back-btn {
+  display: flex; align-items: center; gap: 6px;
+  background: transparent;
+  border: 1px solid var(--border2);
+  border-radius: 6px;
+  padding: 7px 14px;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all .15s;
+  text-decoration: none;
+}
+.back-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+.save-badge {
+  background: var(--green);
+  color: #07090e;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 4px;
+  display: none;
+  letter-spacing: 1px;
+}
+.save-badge.show { display: block; animation: fadeIn .3s; }
+@keyframes fadeIn { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:none} }
+
+/* ─── Layout ────────────────────────────────────────────── */
+.layout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  min-height: calc(100vh - 60px);
+  position: relative; z-index: 1;
+}
+
+/* ─── Sidenav ───────────────────────────────────────────── */
+.sidenav {
+  background: var(--s1);
+  border-right: 1px solid var(--border);
+  padding: 24px 0;
+  position: sticky;
+  top: 60px;
+  height: calc(100vh - 60px);
+  overflow-y: auto;
+}
+
+.nav-section {
+  padding: 0 16px;
+  margin-bottom: 24px;
+}
+
+.nav-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 2.5px;
+  color: var(--muted);
+  text-transform: uppercase;
+  padding: 0 8px;
+  margin-bottom: 6px;
+}
+
+.nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  color: var(--muted);
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all .15s;
+  border: 1px solid transparent;
+  margin-bottom: 2px;
+  background: none;
+  width: 100%;
+  text-align: left;
+}
+.nav-item:hover { color: var(--text); background: var(--s2); }
+.nav-item.active {
+  color: var(--accent);
+  background: rgba(0,229,255,.08);
+  border-color: rgba(0,229,255,.2);
+}
+
+.nav-icon { font-size: 17px; flex-shrink: 0; }
+
+.nav-count {
+  margin-left: auto;
+  background: var(--s3);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 10px;
+  min-width: 22px;
+  text-align: center;
+}
+.nav-item.active .nav-count {
+  background: rgba(0,229,255,.15);
+  color: var(--accent);
+}
+
+/* ─── Contenido ─────────────────────────────────────────── */
+.content {
+  padding: 28px 32px;
+  max-width: 960px;
+}
+
+.section { display: none; }
+.section.active { display: block; }
+
+/* ─── Page header ───────────────────────────────────────── */
+.page-header {
+  display: flex; align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 28px;
+  gap: 16px;
+}
+
+.page-title {
+  font-family: var(--orb);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: #fff;
+  margin-bottom: 4px;
+}
+
+.page-desc {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.add-btn {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--accent);
+  color: #07090e;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all .15s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.add-btn:hover { background: #33ecff; transform: translateY(-1px); }
+
+/* ─── Stats row ─────────────────────────────────────────── */
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+  margin-bottom: 28px;
+}
+
+.stat-card {
+  background: var(--s1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 14px;
+  text-align: center;
+  transition: border-color .15s;
+}
+.stat-card:hover { border-color: var(--border2); }
+
+.stat-val {
+  font-family: var(--orb);
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1;
+  margin-bottom: 5px;
+}
+.stat-lbl {
+  font-size: 11px; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 1px;
+}
+
+.c-accent  { color: var(--accent); }
+.c-green   { color: var(--green); }
+.c-amber   { color: var(--amber); }
+.c-red     { color: var(--red); }
+.c-purple  { color: var(--purple); }
+
+/* ─── Cards de items ────────────────────────────────────── */
+.items-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.item-card {
+  background: var(--s1);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 20px;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 16px;
+  transition: all .15s;
+}
+.item-card:hover { border-color: var(--border2); }
+
+.item-icon {
+  width: 44px; height: 44px;
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px;
+  flex-shrink: 0;
+}
+.icon-cam    { background: rgba(0,229,255,.1); }
+.icon-sensor { background: rgba(0,230,118,.1); }
+.icon-user   { background: rgba(179,157,219,.1); }
+.icon-zone   { background: rgba(255,193,7,.1); }
+
+.item-info { min-width: 0; }
+
+.item-name {
+  font-weight: 600;
+  font-size: 15px;
+  margin-bottom: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.item-detail {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.item-actions {
+  display: flex; align-items: center; gap: 8px;
+  flex-shrink: 0;
+}
+
+.badge {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid;
+  letter-spacing: 1px;
+}
+.badge-on  { color: var(--green);  border-color: rgba(0,230,118,.3);  background: rgba(0,230,118,.08); }
+.badge-off { color: var(--muted);  border-color: var(--border); }
+.badge-admin { color: var(--accent); border-color: rgba(0,229,255,.3); background: rgba(0,229,255,.08); }
+.badge-armed { color: var(--amber); border-color: rgba(255,193,7,.3); background: rgba(255,193,7,.08); }
+.badge-rtsp  { color: var(--purple); border-color: rgba(179,157,219,.3); background: rgba(179,157,219,.08); }
+
+.icon-btn {
+  width: 32px; height: 32px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  font-size: 14px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all .15s;
+}
+.icon-btn:hover { border-color: var(--accent); color: var(--accent); }
+.icon-btn.danger:hover { border-color: var(--red); color: var(--red); }
+
+/* ─── Empty state ───────────────────────────────────────── */
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  background: var(--s1);
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+}
+.empty-icon { font-size: 48px; margin-bottom: 14px; opacity: .4; }
+.empty-title {
+  font-family: var(--orb);
+  font-size: 15px;
+  color: var(--muted);
+  letter-spacing: 1px;
+  margin-bottom: 6px;
+}
+.empty-desc { font-size: 13px; color: var(--muted); }
+
+/* ─── Modal ─────────────────────────────────────────────── */
+.modal-bg {
+  position: fixed; inset: 0;
+  background: rgba(7,9,14,.85);
+  backdrop-filter: blur(6px);
+  z-index: 1000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.modal-bg.open { display: flex; }
+
+.modal {
+  background: var(--s1);
+  border: 1px solid var(--border2);
+  border-radius: 16px;
+  width: 100%;
+  max-width: 500px;
+  box-shadow: 0 24px 80px rgba(0,0,0,.6);
+  animation: modalIn .2s ease-out;
+}
+@keyframes modalIn {
+  from { opacity:0; transform:translateY(12px) scale(.97); }
+  to   { opacity:1; transform:none; }
+}
+
+.modal-header {
+  padding: 22px 24px 0;
+  display: flex; align-items: center; justify-content: space-between;
+}
+
+.modal-title {
+  font-family: var(--orb);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: #fff;
+}
+
+.modal-close {
+  width: 30px; height: 30px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  font-size: 16px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all .15s;
+}
+.modal-close:hover { border-color: var(--red); color: var(--red); }
+
+.modal-body { padding: 20px 24px; }
+
+.modal-footer {
+  padding: 16px 24px;
+  border-top: 1px solid var(--border);
+  display: flex; gap: 10px; justify-content: flex-end;
+}
+
+/* ─── Formularios ───────────────────────────────────────── */
+.form-group { margin-bottom: 16px; }
+
+.form-label {
+  display: block;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  color: var(--muted);
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.form-input, .form-select {
+  width: 100%;
+  background: var(--s2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 13px;
+  transition: border-color .15s;
+  outline: none;
+}
+.form-input:focus, .form-select:focus { border-color: var(--accent); }
+.form-select option { background: var(--s2); }
+
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+.form-toggle {
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--s2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+
+.toggle-label { font-size: 13px; font-weight: 500; }
+
+.toggle-sw {
+  width: 40px; height: 22px;
+  background: var(--border);
+  border-radius: 11px;
+  position: relative;
+  cursor: pointer;
+  border: none;
+  transition: background .2s;
+  flex-shrink: 0;
+}
+.toggle-sw.on { background: var(--accent); }
+.toggle-sw::after {
+  content: '';
+  position: absolute;
+  width: 16px; height: 16px;
+  background: #fff;
+  border-radius: 50%;
+  top: 3px; left: 3px;
+  transition: left .2s;
+}
+.toggle-sw.on::after { left: 21px; }
+
+/* ─── Botones ───────────────────────────────────────────── */
+.btn-primary {
+  background: var(--accent);
+  color: #07090e;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 20px;
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all .15s;
+}
+.btn-primary:hover { background: #33ecff; }
+
+.btn-ghost {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 20px;
+  font-family: var(--sans);
+  font-size: 14px;
+  cursor: pointer;
+  transition: all .15s;
+}
+.btn-ghost:hover { color: var(--text); border-color: var(--border2); }
+
+/* ─── Responsive móvil ──────────────────────────────────── */
+@media (max-width: 700px) {
+  .layout { grid-template-columns: 1fr; }
+  .sidenav {
+    position: static; height: auto;
+    border-right: none; border-bottom: 1px solid var(--border);
+    padding: 12px 0;
+  }
+  .nav-section { display: flex; gap: 4px; overflow-x: auto; padding: 0 12px; margin: 0; }
+  .nav-label { display: none; }
+  .nav-item { white-space: nowrap; flex-shrink: 0; }
+  .content { padding: 16px; }
+  .stats-row { grid-template-columns: repeat(3, 1fr); }
+  .form-row { grid-template-columns: 1fr; }
+  .item-card { grid-template-columns: auto 1fr; }
+  .item-actions { grid-column: 1 / -1; justify-content: flex-end; }
+}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="logo">
+    <div class="logo-mark">🛡️</div>
+    <div>
+      <div class="logo-text">HOME<em>GUARD</em></div>
+      <div class="logo-sub">ADMINISTRACIÓN</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <span class="save-badge" id="save-badge">✓ GUARDADO</span>
+    <a class="back-btn" href="/">← Volver al monitor</a>
+  </div>
+</header>
+
+<div class="layout">
+
+  <!-- SIDENAV -->
+  <nav class="sidenav">
+    <div class="nav-section">
+      <div class="nav-label">Sistema</div>
+      <button class="nav-item active" onclick="showSection('overview', this)">
+        <span class="nav-icon">⚡</span> Resumen
+      </button>
+    </div>
+    <div class="nav-section">
+      <div class="nav-label">Hardware</div>
+      <button class="nav-item" onclick="showSection('cameras', this)">
+        <span class="nav-icon">📹</span> Cámaras
+        <span class="nav-count" id="cnt-cameras">0</span>
+      </button>
+      <button class="nav-item" onclick="showSection('sensors', this)">
+        <span class="nav-icon">📡</span> Sensores
+        <span class="nav-count" id="cnt-sensors">0</span>
+      </button>
+      <button class="nav-item" onclick="showSection('zones', this)">
+        <span class="nav-icon">🗺️</span> Zonas
+        <span class="nav-count" id="cnt-zones">0</span>
+      </button>
+    </div>
+    <div class="nav-section">
+      <div class="nav-label">Acceso</div>
+      <button class="nav-item" onclick="showSection('users', this)">
+        <span class="nav-icon">👤</span> Usuarios
+        <span class="nav-count" id="cnt-users">0</span>
+      </button>
+      <button class="nav-item" onclick="showSection('devices', this)">
+        <span class="nav-icon">📱</span> Dispositivos
+        <span class="nav-count" id="cnt-devices">0</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- CONTENIDO -->
+  <div class="content">
+
+    <!-- OVERVIEW -->
+    <div class="section active" id="section-overview">
+      <div class="page-header">
+        <div>
+          <div class="page-title">RESUMEN DEL SISTEMA</div>
+          <div class="page-desc">Estado general de HomeGuard AI</div>
+        </div>
+      </div>
+      <div class="stats-row" id="overview-stats">
+        <div class="stat-card">
+          <div class="stat-val c-accent" id="ov-cameras">—</div>
+          <div class="stat-lbl">Cámaras</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-val c-green" id="ov-sensors">—</div>
+          <div class="stat-lbl">Sensores</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-val c-amber" id="ov-zones">—</div>
+          <div class="stat-lbl">Zonas</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-val c-purple" id="ov-users">—</div>
+          <div class="stat-lbl">Usuarios</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-val c-green" id="ov-devices">—</div>
+          <div class="stat-lbl">Móviles</div>
+        </div>
+      </div>
+
+      <!-- Accesos rápidos -->
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:8px">
+        <div class="item-card" style="cursor:pointer" onclick="showSection('cameras',document.querySelector('[onclick*=cameras]'))">
+          <div class="item-icon icon-cam">📹</div>
+          <div class="item-info">
+            <div class="item-name">Agregar cámara</div>
+            <div class="item-detail">RTSP · ONVIF · Edge analytics</div>
+          </div>
+          <div style="color:var(--muted);font-size:18px">→</div>
+        </div>
+        <div class="item-card" style="cursor:pointer" onclick="showSection('sensors',document.querySelector('[onclick*=sensors]'))">
+          <div class="item-icon icon-sensor">📡</div>
+          <div class="item-info">
+            <div class="item-name">Agregar sensor</div>
+            <div class="item-detail">PIR · Humo · Gas · CO2 · Puertas</div>
+          </div>
+          <div style="color:var(--muted);font-size:18px">→</div>
+        </div>
+        <div class="item-card" style="cursor:pointer" onclick="showSection('zones',document.querySelector('[onclick*=zones]'))">
+          <div class="item-icon icon-zone">🗺️</div>
+          <div class="item-info">
+            <div class="item-name">Crear zona</div>
+            <div class="item-detail">Interior · Exterior · Perímetro</div>
+          </div>
+          <div style="color:var(--muted);font-size:18px">→</div>
+        </div>
+        <div class="item-card" style="cursor:pointer" onclick="showSection('users',document.querySelector('[onclick*=users]'))">
+          <div class="item-icon icon-user">👤</div>
+          <div class="item-info">
+            <div class="item-name">Agregar usuario</div>
+            <div class="item-detail">Admin · Viewer · PIN de acceso</div>
+          </div>
+          <div style="color:var(--muted);font-size:18px">→</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CÁMARAS -->
+    <div class="section" id="section-cameras">
+      <div class="page-header">
+        <div>
+          <div class="page-title">CÁMARAS IP</div>
+          <div class="page-desc">Gestiona cámaras RTSP y ONVIF con edge analytics</div>
+        </div>
+        <button class="add-btn" onclick="openScanner()">🔍 Buscar cámaras</button>
+      </div>
+      <div class="items-grid" id="cameras-list"></div>
+    </div>
+
+    <!-- SENSORES -->
+    <div class="section" id="section-sensors">
+      <div class="page-header">
+        <div>
+          <div class="page-title">SENSORES IoT</div>
+          <div class="page-desc">PIR, humo, gas, CO2, puertas y ventanas vía MQTT</div>
+        </div>
+        <button class="add-btn" onclick="openModal('sensor')">+ Nuevo sensor</button>
+      </div>
+      <div class="items-grid" id="sensors-list"></div>
+    </div>
+
+    <!-- ZONAS -->
+    <div class="section" id="section-zones">
+      <div class="page-header">
+        <div>
+          <div class="page-title">ZONAS DEL HOGAR</div>
+          <div class="page-desc">Define áreas monitoreadas y su nivel de armado</div>
+        </div>
+        <button class="add-btn" onclick="openModal('zone')">+ Nueva zona</button>
+      </div>
+      <div class="items-grid" id="zones-list"></div>
+    </div>
+
+    <!-- USUARIOS -->
+    <div class="section" id="section-users">
+      <div class="page-header">
+        <div>
+          <div class="page-title">USUARIOS</div>
+          <div class="page-desc">Administradores y viewers del sistema</div>
+        </div>
+        <button class="add-btn" onclick="openModal('user')">+ Nuevo usuario</button>
+      </div>
+      <div class="items-grid" id="users-list"></div>
+    </div>
+
+    <!-- DISPOSITIVOS -->
+    <div class="section" id="section-devices">
+      <div class="page-header">
+        <div>
+          <div class="page-title">DISPOSITIVOS MÓVILES</div>
+          <div class="page-desc">Teléfonos con notificaciones push activas</div>
+        </div>
+      </div>
+      <div class="items-grid" id="devices-list"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- MODALES -->
+<div class="modal-bg" id="modal-bg" onclick="if(event.target===this)closeModal()">
+  <div class="modal" id="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-title">NUEVO ELEMENTO</div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="closeModal()">Cancelar</button>
+      <button class="btn-primary" onclick="saveModal()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = window.location.origin;
+let currentModal = null;
+let editingId     = null;
+
+// ─── Navegación ───────────────────────────────────────────
+function showSection(name, btn) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById(`section-${name}`).classList.add('active');
+  if (btn) btn.classList.add('active');
+  loadSection(name);
+}
+
+async function loadSection(name) {
+  if (name === 'overview')  return loadOverview();
+  if (name === 'cameras')   return loadCameras();
+  if (name === 'sensors')   return loadSensors();
+  if (name === 'zones')     return loadZones();
+  if (name === 'users')     return loadUsers();
+  if (name === 'devices')   return loadDevices();
+}
+
+// ─── Overview ─────────────────────────────────────────────
+async function loadOverview() {
+  try {
+    const d = await fetch(`${API}/api/admin/summary`).then(r=>r.json());
+    document.getElementById('ov-cameras').textContent = d.cameras;
+    document.getElementById('ov-sensors').textContent = d.sensors;
+    document.getElementById('ov-zones').textContent   = d.zones;
+    document.getElementById('ov-users').textContent   = d.users;
+    document.getElementById('ov-devices').textContent = d.devices;
+    document.getElementById('cnt-cameras').textContent = d.cameras;
+    document.getElementById('cnt-sensors').textContent = d.sensors;
+    document.getElementById('cnt-zones').textContent   = d.zones;
+    document.getElementById('cnt-users').textContent   = d.users;
+    document.getElementById('cnt-devices').textContent = d.devices;
+  } catch(e) {}
+}
+
+// ─── Cámaras ──────────────────────────────────────────────
+async function loadCameras() {
+  const list = document.getElementById('cameras-list');
+  try {
+    const cams = await fetch(`${API}/api/admin/cameras`).then(r=>r.json());
+    document.getElementById('cnt-cameras').textContent = cams.length;
+    if (!cams.length) { list.innerHTML = emptyState('📹','Sin cámaras configuradas','Agrega tu primera cámara IP'); return; }
+    list.innerHTML = cams.map(c => `
+      <div class="item-card">
+        <div class="item-icon icon-cam">📹</div>
+        <div class="item-info">
+          <div class="item-name">${c.name}</div>
+          <div class="item-detail">${c.rtsp_url || 'ONVIF — sin URL RTSP'}</div>
+        </div>
+        <div class="item-actions">
+          <span class="badge ${c.source_type==='onvif'?'badge-admin':'badge-rtsp'}">${c.source_type.toUpperCase()}</span>
+          <span class="badge ${c.enabled?'badge-on':'badge-off'}">${c.enabled?'ON':'OFF'}</span>
+          <button class="icon-btn" onclick="editCamera('${c.id}')">✏️</button>
+          <button class="icon-btn danger" onclick="deleteItem('cameras','${c.id}')">🗑</button>
+        </div>
+      </div>`).join('');
+  } catch(e) { list.innerHTML = errorState(); }
+}
+
+async function editCamera(id) {
+  const cams = await fetch(`${API}/api/admin/cameras`).then(r=>r.json());
+  const cam = cams.find(c=>c.id===id);
+  if (!cam) return;
+  editingId = id;
+  openModal('camera', cam);
+}
+
+// ─── Sensores ─────────────────────────────────────────────
+async function loadSensors() {
+  const list = document.getElementById('sensors-list');
+  const SENSOR_ICONS = { pir:'🔦', smoke:'🔥', gas:'💨', co2:'🌫️', door:'🚪', window:'🪟', vibration:'📳' };
+  try {
+    const sens = await fetch(`${API}/api/admin/sensors`).then(r=>r.json());
+    document.getElementById('cnt-sensors').textContent = sens.length;
+    if (!sens.length) { list.innerHTML = emptyState('📡','Sin sensores configurados','Agrega sensores IoT vía MQTT'); return; }
+    list.innerHTML = sens.map(s => `
+      <div class="item-card">
+        <div class="item-icon icon-sensor">${SENSOR_ICONS[s.type]||'📡'}</div>
+        <div class="item-info">
+          <div class="item-name">${s.name}</div>
+          <div class="item-detail">${s.mqtt_topic} · ${s.location}</div>
+        </div>
+        <div class="item-actions">
+          <span class="badge badge-rtsp">${s.type.toUpperCase()}</span>
+          <span class="badge ${s.enabled?'badge-on':'badge-off'}">${s.enabled?'ON':'OFF'}</span>
+          <button class="icon-btn" onclick="editSensor('${s.id}')">✏️</button>
+          <button class="icon-btn danger" onclick="deleteItem('sensors','${s.id}')">🗑</button>
+        </div>
+      </div>`).join('');
+  } catch(e) { list.innerHTML = errorState(); }
+}
+
+async function editSensor(id) {
+  const sens = await fetch(`${API}/api/admin/sensors`).then(r=>r.json());
+  const s = sens.find(s=>s.id===id);
+  if (!s) return;
+  editingId = id;
+  openModal('sensor', s);
+}
+
+// ─── Zonas ────────────────────────────────────────────────
+async function loadZones() {
+  const list = document.getElementById('zones-list');
+  const ZONE_ICONS = { interior:'🏠', exterior:'🌿', perimeter:'🔒' };
+  try {
+    const zones = await fetch(`${API}/api/admin/zones`).then(r=>r.json());
+    document.getElementById('cnt-zones').textContent = zones.length;
+    if (!zones.length) { list.innerHTML = emptyState('🗺️','Sin zonas configuradas','Define las áreas de tu hogar'); return; }
+    list.innerHTML = zones.map(z => `
+      <div class="item-card">
+        <div class="item-icon icon-zone">${ZONE_ICONS[z.type]||'🏠'}</div>
+        <div class="item-info">
+          <div class="item-name">${z.name}</div>
+          <div class="item-detail">Tipo: ${z.type}</div>
+        </div>
+        <div class="item-actions">
+          <span class="badge ${z.armed?'badge-armed':'badge-off'}">${z.armed?'ARMADA':'DESARMADA'}</span>
+          <button class="icon-btn" onclick="editZone('${z.id}')">✏️</button>
+          <button class="icon-btn danger" onclick="deleteItem('zones','${z.id}')">🗑</button>
+        </div>
+      </div>`).join('');
+  } catch(e) { list.innerHTML = errorState(); }
+}
+
+async function editZone(id) {
+  const zones = await fetch(`${API}/api/admin/zones`).then(r=>r.json());
+  const z = zones.find(z=>z.id===id);
+  if (!z) return;
+  editingId = id;
+  openModal('zone', z);
+}
+
+// ─── Usuarios ─────────────────────────────────────────────
+async function loadUsers() {
+  const list = document.getElementById('users-list');
+  try {
+    const users = await fetch(`${API}/api/admin/users`).then(r=>r.json());
+    document.getElementById('cnt-users').textContent = users.length;
+    if (!users.length) { list.innerHTML = emptyState('👤','Sin usuarios configurados','Agrega usuarios con acceso al sistema'); return; }
+    list.innerHTML = users.map(u => `
+      <div class="item-card">
+        <div class="item-icon icon-user">👤</div>
+        <div class="item-info">
+          <div class="item-name">${u.name}</div>
+          <div class="item-detail">Creado: ${new Date(u.created_at).toLocaleDateString('es-CL')}</div>
+        </div>
+        <div class="item-actions">
+          <span class="badge ${u.role==='admin'?'badge-admin':'badge-rtsp'}">${u.role.toUpperCase()}</span>
+          <button class="icon-btn danger" onclick="deleteItem('users','${u.id}')">🗑</button>
+        </div>
+      </div>`).join('');
+  } catch(e) { list.innerHTML = errorState(); }
+}
+
+// ─── Dispositivos ──────────────────────────────────────────
+async function loadDevices() {
+  const list = document.getElementById('devices-list');
+  try {
+    const devs = await fetch(`${API}/api/push/devices`).then(r=>r.json());
+    document.getElementById('cnt-devices').textContent = devs.length;
+    if (!devs.length) { list.innerHTML = emptyState('📱','Sin dispositivos registrados','Escanea el QR desde la app móvil y activa las notificaciones'); return; }
+    list.innerHTML = devs.map(d => `
+      <div class="item-card">
+        <div class="item-icon icon-user">📱</div>
+        <div class="item-info">
+          <div class="item-name">${d.device_name}</div>
+          <div class="item-detail">${d.device_id}</div>
+        </div>
+        <div class="item-actions">
+          <span class="badge badge-on">ACTIVO</span>
+          <button class="icon-btn danger" onclick="deleteItem('push/subscribe','${d.device_id}')">🗑</button>
+        </div>
+      </div>`).join('');
+  } catch(e) { list.innerHTML = errorState(); }
+}
+
+// ─── Delete genérico ───────────────────────────────────────
+async function deleteItem(type, id) {
+  if (!confirm('¿Eliminar este elemento?')) return;
+  await fetch(`${API}/api/admin/${type}/${id}`, { method: 'DELETE' });
+  showSaved();
+  loadOverview();
+  if (type === 'cameras')  loadCameras();
+  if (type === 'sensors')  loadSensors();
+  if (type === 'zones')    loadZones();
+  if (type === 'users')    loadUsers();
+  if (type.includes('push')) loadDevices();
+}
+
+// ─── Modal forms ──────────────────────────────────────────
+const FORMS = {
+  camera: (data={}) => ({
+    title: data.id ? 'EDITAR CÁMARA' : 'NUEVA CÁMARA',
+    html: `
+      <div class="form-group">
+        <label class="form-label">Nombre</label>
+        <input class="form-input" id="f-name" placeholder="Ej: Entrada principal" value="${data.name||''}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Tipo de integración</label>
+        <select class="form-select" id="f-source" onchange="toggleOnvif(this.value)">
+          <option value="rtsp" ${data.source_type!=='onvif'?'selected':''}>RTSP (stream directo)</option>
+          <option value="onvif" ${data.source_type==='onvif'?'selected':''}>ONVIF (edge analytics)</option>
+        </select>
+      </div>
+      <div class="form-group" id="f-rtsp-group">
+        <label class="form-label">URL RTSP</label>
+        <input class="form-input" id="f-rtsp" placeholder="rtsp://admin:pass@192.168.1.x:554/stream" value="${data.rtsp_url||''}">
+      </div>
+      <div id="f-onvif-group" style="display:none">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Usuario ONVIF</label>
+            <input class="form-input" id="f-ouser" placeholder="admin" value="${data.onvif_user||''}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Contraseña ONVIF</label>
+            <input class="form-input" type="password" id="f-opass" placeholder="••••••" value="${data.onvif_password||''}">
+          </div>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">FPS de análisis</label>
+          <select class="form-select" id="f-fps">
+            ${[1,2,3,5,10].map(v=>`<option ${(data.analysis_fps||5)==v?'selected':''}>${v}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Confianza mín. (sin IA)</label>
+          <select class="form-select" id="f-conf">
+            ${[0.7,0.8,0.85,0.9,0.95].map(v=>`<option value="${v}" ${(data.ai_confidence_threshold||0.85)==v?'selected':''}>${Math.round(v*100)}%</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="form-toggle">
+        <span class="toggle-label">Habilitada</span>
+        <button class="toggle-sw ${data.enabled!==false?'on':''}" id="f-enabled" onclick="this.classList.toggle('on')"></button>
+      </div>`,
+  }),
+
+  sensor: (data={}) => ({
+    title: data.id ? 'EDITAR SENSOR' : 'NUEVO SENSOR IoT',
+    html: `
+      <div class="form-group">
+        <label class="form-label">Nombre</label>
+        <input class="form-input" id="f-name" placeholder="Ej: Sensor sala" value="${data.name||''}">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Tipo de sensor</label>
+          <select class="form-select" id="f-type">
+            ${['pir','smoke','gas','co2','door','window','vibration']
+              .map(t=>`<option value="${t}" ${data.type===t?'selected':''}>${t.toUpperCase()}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Ubicación / zona</label>
+          <input class="form-input" id="f-location" placeholder="Ej: Sala" value="${data.location||''}">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Topic MQTT</label>
+        <input class="form-input" id="f-topic" placeholder="homeguard/sensor/pir" value="${data.mqtt_topic||'homeguard/sensor/'}">
+      </div>
+      <div class="form-toggle">
+        <span class="toggle-label">Habilitado</span>
+        <button class="toggle-sw ${data.enabled!==false?'on':''}" id="f-enabled" onclick="this.classList.toggle('on')"></button>
+      </div>`,
+  }),
+
+  zone: (data={}) => ({
+    title: data.id ? 'EDITAR ZONA' : 'NUEVA ZONA',
+    html: `
+      <div class="form-group">
+        <label class="form-label">Nombre de la zona</label>
+        <input class="form-input" id="f-name" placeholder="Ej: Patio trasero" value="${data.name||''}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Tipo</label>
+        <select class="form-select" id="f-type">
+          <option value="interior"  ${data.type==='interior'?'selected':''}>Interior</option>
+          <option value="exterior"  ${data.type==='exterior'?'selected':''}>Exterior</option>
+          <option value="perimeter" ${data.type==='perimeter'?'selected':''}>Perímetro</option>
+        </select>
+      </div>
+      <div class="form-toggle">
+        <span class="toggle-label">Zona armada</span>
+        <button class="toggle-sw ${data.armed!==false?'on':''}" id="f-armed" onclick="this.classList.toggle('on')"></button>
+      </div>`,
+  }),
+
+  user: (data={}) => ({
+    title: 'NUEVO USUARIO',
+    html: `
+      <div class="form-group">
+        <label class="form-label">Nombre completo</label>
+        <input class="form-input" id="f-name" placeholder="Ej: Carlos Méndez" value="${data.name||''}">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Rol</label>
+          <select class="form-select" id="f-role">
+            <option value="admin">Administrador</option>
+            <option value="viewer">Visualizador</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">PIN de acceso (opcional)</label>
+          <input class="form-input" id="f-pin" type="password" placeholder="4–6 dígitos" maxlength="6">
+        </div>
+      </div>`,
+  }),
+};
+
+function openModal(type, data={}) {
+  currentModal = type;
+  editingId = data.id || null;
+  const form = FORMS[type](data);
+  document.getElementById('modal-title').textContent = form.title;
+  document.getElementById('modal-body').innerHTML = form.html;
+  document.getElementById('modal-bg').classList.add('open');
+  // Aplicar lógica onvif si aplica
+  const src = document.getElementById('f-source');
+  if (src) toggleOnvif(src.value);
+}
+
+function closeModal() {
+  document.getElementById('modal-bg').classList.remove('open');
+  currentModal = null; editingId = null;
+}
+
+function toggleOnvif(val) {
+  const rtsp  = document.getElementById('f-rtsp-group');
+  const onvif = document.getElementById('f-onvif-group');
+  if (!rtsp || !onvif) return;
+  rtsp.style.display  = val === 'onvif' ? 'none' : 'block';
+  onvif.style.display = val === 'onvif' ? 'block' : 'none';
+}
+
+async function saveModal() {
+  const v = id => document.getElementById(id)?.value?.trim();
+  const on = id => document.getElementById(id)?.classList.contains('on') ?? true;
+
+  let url, body;
+
+  if (currentModal === 'camera') {
+    body = {
+      name: v('f-name'), rtsp_url: v('f-rtsp'),
+      source_type: v('f-source'),
+      analysis_fps: parseInt(v('f-fps')||'5'),
+      ai_confidence_threshold: parseFloat(v('f-conf')||'0.85'),
+      enabled: on('f-enabled'),
+      onvif_user: v('f-ouser')||'', onvif_password: v('f-opass')||'',
+    };
+    url = editingId
+      ? `${API}/api/admin/cameras/${editingId}`
+      : `${API}/api/admin/cameras`;
+
+  } else if (currentModal === 'sensor') {
+    body = {
+      name: v('f-name'), type: v('f-type'),
+      location: v('f-location'), mqtt_topic: v('f-topic'),
+      enabled: on('f-enabled'),
+    };
+    url = editingId
+      ? `${API}/api/admin/sensors/${editingId}`
+      : `${API}/api/admin/sensors`;
+
+  } else if (currentModal === 'zone') {
+    body = { name: v('f-name'), type: v('f-type'), armed: on('f-armed') };
+    url = editingId
+      ? `${API}/api/admin/zones/${editingId}`
+      : `${API}/api/admin/zones`;
+
+  } else if (currentModal === 'user') {
+    body = { name: v('f-name'), role: v('f-role'), pin: v('f-pin')||null };
+    url = `${API}/api/admin/users`;
+  }
+
+  if (!body.name) { alert('El nombre es obligatorio'); return; }
+
+  const method = editingId ? 'PUT' : 'POST';
+  await fetch(url, {
+    method, headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(body),
+  });
+
+  closeModal();
+  showSaved();
+  loadOverview();
+  loadSection(currentModal === 'camera' ? 'cameras' :
+              currentModal === 'sensor' ? 'sensors' :
+              currentModal === 'zone'   ? 'zones'   : 'users');
+}
+
+// ─── Utilidades ───────────────────────────────────────────
+function showSaved() {
+  const b = document.getElementById('save-badge');
+  b.classList.add('show');
+  setTimeout(() => b.classList.remove('show'), 2500);
+}
+
+function emptyState(icon, title, desc) {
+  return `<div class="empty-state">
+    <div class="empty-icon">${icon}</div>
+    <div class="empty-title">${title}</div>
+    <div class="empty-desc">${desc}</div>
+  </div>`;
+}
+
+function errorState() {
+  return emptyState('⚠️','Error de conexión','No se pudo conectar con el servidor HomeGuard');
+}
+
+// ─── Escáner de red ───────────────────────────────────────
+function openScanner() {
+  document.getElementById('scanner-modal').classList.add('open');
+  loadSubnet();
+}
+
+function closeScanner() {
+  document.getElementById('scanner-modal').classList.remove('open');
+  stopScan();
+}
+
+let scanController = null;
+
+async function loadSubnet() {
+  try {
+    const d = await fetch(`${API}/api/scanner/subnet`).then(r=>r.json());
+    document.getElementById('sc-subnet').value = d.subnet;
+  } catch(e) {}
+}
+
+async function startScan() {
+  const subnet = document.getElementById('sc-subnet').value.trim();
+  const resultsEl = document.getElementById('sc-results');
+  const progressEl = document.getElementById('sc-progress');
+  const progressBar = document.getElementById('sc-bar');
+  const progressMsg = document.getElementById('sc-msg');
+  const startBtn = document.getElementById('sc-start-btn');
+
+  resultsEl.innerHTML = '';
+  progressEl.style.display = 'block';
+  progressBar.style.width = '30%';
+  progressMsg.textContent = 'Escaneando la red... esto puede tomar 20-30 segundos';
+  startBtn.disabled = true;
+  startBtn.textContent = 'Escaneando...';
+
+  // Animación de progreso mientras espera
+  let pct = 30;
+  const anim = setInterval(() => {
+    pct = Math.min(pct + 1, 90);
+    progressBar.style.width = pct + '%';
+  }, 500);
+
+  try {
+    const url = `${API}/api/scanner/scan${subnet ? '?subnet='+encodeURIComponent(subnet) : ''}`;
+    const data = await fetch(url).then(r => r.json());
+    clearInterval(anim);
+    progressBar.style.width = '100%';
+    progressMsg.textContent = `Escaneo completo — ${data.total} dispositivo(s) encontrado(s)`;
+    setTimeout(() => { progressEl.style.display = 'none'; }, 1500);
+    renderScanResults(data.devices || []);
+  } catch(e) {
+    clearInterval(anim);
+    progressEl.style.display = 'none';
+    resultsEl.innerHTML = `<div style="text-align:center;padding:30px;color:var(--red);font-family:var(--mono);font-size:12px">Error durante el escaneo — verifica que el servicio está corriendo</div>`;
+  }
+
+  startBtn.disabled = false;
+  startBtn.textContent = '🔍 Escanear';
+}
+
+function stopScan() {
+  if (scanController) { scanController.close(); scanController = null; }
+}
+
+async function probeManual() {
+  const ip = document.getElementById('sc-manual-ip').value.trim();
+  if (!ip) { alert('Ingresa una IP válida'); return; }
+  const btn = document.getElementById('sc-probe-btn');
+  btn.disabled = true; btn.textContent = 'Analizando...';
+
+  try {
+    const device = await fetch(`${API}/api/scanner/probe`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ip}),
+    }).then(r=>r.json());
+
+    if (device.error) {
+      alert(`Error: ${device.error}`);
+    } else {
+      renderScanResults([device]);
+    }
+  } catch(e) {
+    alert('No se pudo conectar con el servidor');
+  }
+  btn.disabled = false; btn.textContent = '▶ Analizar';
+}
+
+const DEVICE_ICONS = { camera:'📹', sensor:'📡', unknown:'🔌' };
+const BRAND_LABELS = {
+  hikvision:'Hikvision', dahua:'Dahua', hanwha:'Hanwha Wisenet',
+  axis:'Axis', reolink:'Reolink', tplink:'TP-Link Tapo',
+  amcrest:'Amcrest', uniview:'Uniview', foscam:'Foscam',
+  mqtt:'MQTT Broker', unknown:'Desconocida',
+};
+
+function renderScanResults(devices) {
+  const el = document.getElementById('sc-results');
+  if (!devices.length) {
+    el.innerHTML = `<div style="text-align:center;padding:30px;color:var(--muted);font-family:var(--mono);font-size:12px">
+      Sin dispositivos encontrados en la red<br>
+      <span style="opacity:.6">Prueba con IP manual o verifica la subred</span>
+    </div>`;
+    return;
+  }
+
+  el.innerHTML = devices.map(d => {
+    const brand = BRAND_LABELS[d.brand] || d.brand || 'Desconocida';
+    const icon  = DEVICE_ICONS[d.device_type] || '🔌';
+    const ports = d.open_ports.slice(0,4).join(', ');
+    const hasRtsp = d.rtsp_url;
+    const hasOnvif = d.onvif_url;
+
+    return `
+    <div style="
+      background:var(--s2); border:1px solid var(--border); border-radius:10px;
+      padding:14px 16px; margin-bottom:8px; display:grid;
+      grid-template-columns:auto 1fr auto; gap:12px; align-items:center;
+    ">
+      <div style="
+        width:42px;height:42px;border-radius:10px;background:rgba(0,229,255,.1);
+        display:flex;align-items:center;justify-content:center;font-size:20px;
+      ">${icon}</div>
+
+      <div>
+        <div style="font-weight:600;font-size:15px;margin-bottom:2px">
+          ${d.ip}
+          ${d.hostname ? `<span style="font-size:12px;color:var(--muted);font-weight:400"> (${d.hostname})</span>` : ''}
+        </div>
+        <div style="font-family:var(--mono);font-size:11px;color:var(--muted)">
+          ${brand}${d.model ? ' · ' + d.model : ''}
+          ${ports ? ' · Puertos: ' + ports : ''}
+        </div>
+        ${hasRtsp ? `<div style="font-family:var(--mono);font-size:10px;color:var(--accent);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${d.rtsp_url}</div>` : ''}
+        <div style="display:flex;gap:6px;margin-top:5px">
+          ${hasRtsp  ? '<span style="font-family:var(--mono);font-size:9px;padding:2px 6px;border-radius:3px;border:1px solid rgba(0,229,255,.3);color:var(--accent)">RTSP</span>' : ''}
+          ${hasOnvif ? '<span style="font-family:var(--mono);font-size:9px;padding:2px 6px;border-radius:3px;border:1px solid rgba(179,157,219,.3);color:var(--purple)">ONVIF</span>' : ''}
+          ${d.device_type==='sensor' ? '<span style="font-family:var(--mono);font-size:9px;padding:2px 6px;border-radius:3px;border:1px solid rgba(0,230,118,.3);color:var(--green)">MQTT</span>' : ''}
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">
+        ${d.device_type === 'camera' ? `
+          <button onclick='addFromScan(${JSON.stringify(d).replace(/'/g,"&#39;")})' style="
+            background:var(--accent);color:#07090e;border:none;border-radius:6px;
+            padding:8px 14px;font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;
+          ">+ Agregar</button>` : ''}
+        ${d.device_type === 'sensor' ? `
+          <button onclick='addSensorFromScan(${JSON.stringify(d).replace(/'/g,"&#39;")})' style="
+            background:var(--green);color:#07090e;border:none;border-radius:6px;
+            padding:8px 14px;font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;
+          ">+ Agregar</button>` : ''}
+        ${d.device_type === 'unknown' ? `
+          <button onclick='addFromScan(${JSON.stringify(d).replace(/'/g,"&#39;")})' style="
+            background:var(--s3);color:var(--text);border:1px solid var(--border);border-radius:6px;
+            padding:8px 14px;font-family:var(--sans);font-size:13px;cursor:pointer;
+          ">+ Cámara</button>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function addFromScan(device) {
+  // Pre-llenar el modal de cámara con datos del escaneo
+  closeScanner();
+  const brand = BRAND_LABELS[device.brand] || '';
+  const prefilled = {
+    name: `${brand} ${device.ip}`.trim(),
+    rtsp_url: device.rtsp_url || `rtsp://admin:password@${device.ip}:554/stream`,
+    source_type: device.onvif_url ? 'onvif' : 'rtsp',
+    onvif_user: 'admin',
+    enabled: true,
+  };
+  openModal('camera', prefilled);
+}
+
+function addSensorFromScan(device) {
+  closeScanner();
+  const prefilled = {
+    name: `Sensor ${device.ip}`,
+    mqtt_topic: 'homeguard/sensor/',
+    location: '',
+    type: 'pir',
+    enabled: true,
+  };
+  openModal('sensor', prefilled);
+}
+
+// ─── Init ─────────────────────────────────────────────────
+loadOverview();
+</script>
+<!-- MODAL ESCÁNER DE RED -->
+<div class="modal-bg" id="scanner-modal" onclick="if(event.target===this)closeScanner()" style="align-items:flex-start;padding-top:40px">
+  <div class="modal" style="max-width:640px">
+    <div class="modal-header">
+      <div class="modal-title">🔍 BUSCAR DISPOSITIVOS EN LA RED</div>
+      <button class="modal-close" onclick="closeScanner()">✕</button>
+    </div>
+    <div class="modal-body">
+
+      <!-- Escaneo automático -->
+      <div style="margin-bottom:16px">
+        <div class="form-label" style="margin-bottom:8px">ESCANEO AUTOMÁTICO</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input class="form-input" id="sc-subnet" placeholder="192.168.1.0/24" style="flex:1">
+          <button class="btn-primary" id="sc-start-btn" onclick="startScan()" style="white-space:nowrap">
+            🔍 Escanear
+          </button>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:5px">
+          Escanea toda la subred buscando cámaras IP, sensores MQTT y dispositivos IoT
+        </div>
+      </div>
+
+      <!-- Barra de progreso -->
+      <div id="sc-progress" style="display:none;margin-bottom:16px">
+        <div style="background:var(--s3);border-radius:4px;height:4px;overflow:hidden;margin-bottom:6px">
+          <div id="sc-bar" style="height:100%;background:var(--accent);width:0%;transition:width .3s;border-radius:4px"></div>
+        </div>
+        <div id="sc-msg" style="font-family:var(--mono);font-size:11px;color:var(--muted)">Iniciando...</div>
+      </div>
+
+      <!-- Separador -->
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+        <div style="flex:1;height:1px;background:var(--border)"></div>
+        <div style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:1px">O INGRESA UNA IP</div>
+        <div style="flex:1;height:1px;background:var(--border)"></div>
+      </div>
+
+      <!-- IP manual -->
+      <div style="display:flex;gap:8px;margin-bottom:16px">
+        <input class="form-input" id="sc-manual-ip" placeholder="192.168.1.112" style="flex:1"
+               onkeydown="if(event.key==='Enter')probeManual()">
+        <button class="btn-primary" id="sc-probe-btn" onclick="probeManual()" style="white-space:nowrap">
+          ▶ Analizar
+        </button>
+      </div>
+
+      <!-- Resultados -->
+      <div style="max-height:380px;overflow-y:auto" id="sc-results"></div>
+
+    </div>
+    <div class="modal-footer" style="justify-content:space-between">
+      <div style="font-family:var(--mono);font-size:10px;color:var(--muted)">
+        Los dispositivos encontrados se pre-configuran automáticamente
+      </div>
+      <button class="btn-ghost" onclick="closeScanner()">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
