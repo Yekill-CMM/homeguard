@@ -743,15 +743,15 @@ header {
 </div>
 
 <script>
-// ─── Estado ──────────────────────────────────────────────────
-const API = '';  // mismo origen — FastAPI en :8000
+// --- Estado --------------------------------------------------
+const API = '';  // mismo origen -- FastAPI en :8000
 let currentFilter = 'all';
 let currentHours  = 24;
 let lastEventId   = null;
 let knownAlerts   = new Set();
 let positiveOnly  = true;  // Por defecto solo positivos >50%
 
-// ─── Utilidades ───────────────────────────────────────────────
+// --- Utilidades -----------------------------------------------
 const $ = id => document.getElementById(id);
 
 function formatTime(iso) {
@@ -793,7 +793,7 @@ function confClass(c) {
   return 'conf-low';
 }
 
-// ─── Reloj ────────────────────────────────────────────────────
+// --- Reloj ----------------------------------------------------
 function updateClock() {
   const now = new Date();
   $('clock').textContent = now.toLocaleTimeString('es-CL', { hour12: false });
@@ -801,7 +801,7 @@ function updateClock() {
 setInterval(updateClock, 1000);
 updateClock();
 
-// ─── Cargar métricas ─────────────────────────────────────────
+// --- Cargar métricas -----------------------------------------
 async function loadSummary() {
   try {
     const r = await fetch(`${API}/api/summary`);
@@ -812,7 +812,7 @@ async function loadSummary() {
   } catch(e) { console.warn('summary:', e); }
 }
 
-// ─── Cargar cámaras ──────────────────────────────────────────
+// --- Cargar cámaras ------------------------------------------
 async function loadCameras() {
   try {
     const r = await fetch(`${API}/api/cameras`);
@@ -830,7 +830,7 @@ async function loadCameras() {
   } catch(e) { console.warn('cameras:', e); }
 }
 
-// ─── Cargar eventos ───────────────────────────────────────────
+// --- Cargar eventos -------------------------------------------
 async function loadEvents() {
   let url = `${API}/api/events?hours=${currentHours}&limit=80`;
   if (currentFilter === 'alerts') url += '&alerts_only=true';
@@ -881,7 +881,7 @@ function renderEvents(events) {
             ${label}
             ${isAlert ? '<span class="alert-badge">ALERTA</span>' : ''}
           </div>
-          <div class="event-desc">${e.ai_description || e.camera_name || '—'}</div>
+          <div class="event-desc">${e.ai_description || e.camera_name || '--'}</div>
         </div>
         <div class="event-meta">
           <div class="event-time">${formatTime(e.timestamp)}</div>
@@ -893,7 +893,7 @@ function renderEvents(events) {
   }).join('');
 }
 
-// ─── Cargar alertas ───────────────────────────────────────────
+// --- Cargar alertas -------------------------------------------
 async function loadAlerts() {
   try {
     const r = await fetch(`${API}/api/alerts?limit=30`);
@@ -921,20 +921,20 @@ async function loadAlerts() {
           <div class="alert-time">${formatTime(a.timestamp)}</div>
         </div>
         <div class="alert-cam">📹 ${a.camera_name}</div>
-        <div class="alert-reason">${a.ai_alert_reason ?? a.ai_description ?? '—'}</div>
+        <div class="alert-reason">${a.ai_alert_reason ?? a.ai_description ?? '--'}</div>
       </div>
     `).join('');
   } catch(e) { console.warn('alerts:', e); }
 }
 
-// ─── Toast de nueva alerta ────────────────────────────────────
+// --- Toast de nueva alerta ------------------------------------
 function showToast(alert) {
   const t = document.createElement('div');
   t.className = 'toast';
   t.innerHTML = `
     <div class="toast-icon">🚨</div>
     <div class="toast-body">
-      <div class="toast-title">ALERTA — ${LABELS[alert.event_type] ?? alert.event_type}</div>
+      <div class="toast-title">ALERTA -- ${LABELS[alert.event_type] ?? alert.event_type}</div>
       <div class="toast-msg">${alert.camera_name}: ${alert.ai_alert_reason ?? ''}</div>
     </div>
     <button class="toast-close" onclick="this.parentElement.remove()">✕</button>
@@ -943,7 +943,7 @@ function showToast(alert) {
   setTimeout(() => t.remove(), 8000);
 }
 
-// ─── Filtros y navegación ─────────────────────────────────────
+// --- Filtros y navegación -------------------------------------
 function togglePositive() {
   positiveOnly = !positiveOnly;
   const btn = $('btn-positive');
@@ -999,7 +999,7 @@ function showDetail(id) {
       };
 
       // Info del evento
-      const conf = e.confidence ? Math.round(e.confidence * 100) + '%' : '—';
+      const conf = e.confidence ? Math.round(e.confidence * 100) + '%' : '--';
       const src  = e.source_type === 'edge' ? '📡 Edge analytics' : '🎞️ Stream local';
       info.innerHTML = `
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-family:var(--font-mono);font-size:12px">
@@ -1008,7 +1008,7 @@ function showDetail(id) {
           <div><span style="color:var(--muted)">Tipo</span><br>${LABELS[e.event_type] ?? e.event_type}</div>
           <div><span style="color:var(--muted)">Confianza</span><br>${conf}</div>
           <div><span style="color:var(--muted)">Fuente</span><br>${src}</div>
-          <div><span style="color:var(--muted)">Severidad</span><br>${e.severity ?? '—'}</div>
+          <div><span style="color:var(--muted)">Severidad</span><br>${e.severity ?? '--'}</div>
         </div>
         ${e.ai_description ? `<div style="margin-top:10px;font-size:13px;color:var(--text)">${e.ai_description}</div>` : ''}
         ${e.ai_alert_reason ? `<div style="margin-top:6px;font-size:12px;color:var(--red)">⚠️ ${e.ai_alert_reason}</div>` : ''}
@@ -1031,7 +1031,7 @@ function closeSnapshot() {
   document.getElementById('snapshot-img').src = '';
 }
 
-// ─── Monitor de salud ─────────────────────────────────────
+// --- Monitor de salud -------------------------------------
 async function loadHealth() {
   try {
     const summary = await fetch(`${API}/api/health/summary`).then(r=>r.json());
@@ -1056,7 +1056,7 @@ async function loadHealth() {
       badge.style.color = 'var(--green)';
     }
   } catch(e) {}
-}────
+}
 async function refresh() {
   await Promise.all([loadSummary(), loadAlerts(), loadHealth()]);
   await loadEvents();

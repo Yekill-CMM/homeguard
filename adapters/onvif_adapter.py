@@ -1,7 +1,7 @@
 """
 HomeGuard AI — Adaptador ONVIF para Hanwha Wisenet
-Usa onvif-zeep para PullPoint subscription y recibe eventos de analítica
-(Virtual Line, Motion Detection, Tampering) directamente de la cámara.
+Parsea eventos ONVIF directamente desde el XML del mensaje,
+ya que Hanwha no expone el topic en el campo estándar.
 """
 
 import asyncio
@@ -15,23 +15,14 @@ from config.settings import CameraConfig
 
 logger = logging.getLogger(__name__)
 
-# Mapeo de topics Hanwha → EventType HomeGuard
-HANWHA_TOPIC_MAP = {
-    "VideoAnalytics":      (EventType.INTRUSION, Severity.HIGH,   0.90, False),
-    "MotionDetection":     (EventType.MOTION,    Severity.LOW,    0.70, True),
-    "MotionAlarm":         (EventType.MOTION,    Severity.MEDIUM, 0.80, True),
-    "TamperingDetection":  (EventType.TAMPER,    Severity.HIGH,   0.95, False),
-    "ImageTooBlurry":      (EventType.TAMPER,    Severity.MEDIUM, 0.90, False),
-    "DigitalInput":        (EventType.INTRUSION, Severity.HIGH,   0.95, False),
-}
-
 CONFIDENCE_SKIP_AI = 0.85
 
 
 class ONVIFAdapter(BaseAdapter):
     """
-    Adaptador ONVIF para cámaras Hanwha Wisenet con edge analytics.
-    Usa PullPoint subscription para recibir eventos en tiempo real.
+    Adaptador ONVIF para cámaras Hanwha Wisenet.
+    Detecta eventos de Virtual Line, Motion y Tampering
+    parseando el XML del mensaje directamente.
     """
 
     def __init__(self, camera_config: CameraConfig):
@@ -102,6 +93,7 @@ class ONVIFAdapter(BaseAdapter):
             return False
 
     async def _poll_loop(self):
+        """Loop de polling ONVIF."""
         while self._running:
             try:
                 messages = await asyncio.get_event_loop().run_in_executor(
@@ -118,7 +110,7 @@ class ONVIFAdapter(BaseAdapter):
                         if not isinstance(notifications, list):
                             notifications = [notifications]
                         for msg in notifications:
-                            event = self._parse_notification(msg)
+                            event = self._parse_message(msg)
                             if event:
                                 await self.emit(event)
 
@@ -132,87 +124,140 @@ class ONVIFAdapter(BaseAdapter):
                 except Exception:
                     pass
 
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.3)
 
-    def _parse_notification(self, msg) -> Optional[SecurityEvent]:
+    def _parse_message(self, msg) -> Optional[SecurityEvent]:
+        """
+        Parsea un mensaje ONVIF de Hanwha.
+        Detecta el tipo de evento por los campos del mensaje,
+        no por el topic (que Hanwha no expone correctamente).
+        """
         try:
-            topic_str = ""
-            if hasattr(msg, 'Topic') and msg.Topic:
-                topic_val = msg.Topic._value_1 if hasattr(msg.Topic, '_value_1') else str(msg.Topic)
-                topic_str = str(topic_val) if topic_val else ""
-
-            mapping = None
-            matched_topic = None
-            for topic_key, config in HANWHA_TOPIC_MAP.items():
-                if topic_key.lower() in topic_str.lower():
-                    mapping = config
-                    matched_topic = topic_key
-                    break
-
-            if not mapping:
-                self.logger.debug(f"Topic ONVIF sin mapeo: {topic_str}")
+            elem = msg.Message._value_1
+            if elem is None:
                 return None
 
-            event_type, severity, confidence, needs_ai = mapping
+            NS = 'http://www.onvif.org/ver10/schema'
+            op = elem.get('PropertyOperation', '')
 
-            state = self._extract_state(msg)
-            if state is False:
+            # Ignorar eventos de inicialización
+            if op == 'Initialized':
                 return None
 
-            needs_ai_analysis = needs_ai or (confidence < CONFIDENCE_SKIP_AI)
+            # Extraer datos del mensaje
+            data_items = {}
+            source_items = {}
 
-            self.logger.info(
-                f"[{self.camera_config.name}] ONVIF: {matched_topic} → "
-                f"{event_type.value} ({confidence:.0%}) — "
-                f"{'→ Claude' if needs_ai_analysis else '→ directo'}"
-            )
+            data_el = elem.find(f'{{{NS}}}Data')
+            if data_el is not None:
+                for item in data_el.findall(f'{{{NS}}}SimpleItem'):
+                    data_items[item.get('Name', '')] = item.get('Value', '')
 
-            snapshot = self._get_snapshot()
+            source_el = elem.find(f'{{{NS}}}Source')
+            if source_el is not None:
+                for item in source_el.findall(f'{{{NS}}}SimpleItem'):
+                    source_items[item.get('Name', '')] = item.get('Value', '')
 
-            return SecurityEvent(
-                camera_id=self.camera_config.id,
-                camera_name=self.camera_config.name,
-                timestamp=datetime.now(),
-                source_type=SourceType.EDGE,
-                event_type=event_type,
-                severity=severity,
-                confidence=confidence,
-                snapshot=snapshot,
-                needs_ai_analysis=needs_ai_analysis,
-                raw_metadata={
-                    "onvif_topic": topic_str,
-                    "matched_topic": matched_topic,
-                    "source": "edge_analytics",
-                    "camera_ip": self._host,
-                },
-            )
+            # ── Clasificar el evento por los datos ──────────────────
+
+            # Virtual Line / IVA — State + Action
+            if 'State' in data_items and 'Action' in data_items:
+                state = str(data_items['State'])
+                action = data_items.get('Action', '')
+
+                # Solo procesar cuando State=1 (cruce activo)
+                if state not in ('1', 'true', 'True'):
+                    return None
+
+                self.logger.info(
+                    f"[{self.camera_config.name}] Virtual Line: "
+                    f"State={state} Action={action} → INTRUSION"
+                )
+                return self._build_event(
+                    event_type=EventType.INTRUSION,
+                    severity=Severity.HIGH,
+                    confidence=0.90,
+                    needs_claude=False,
+                    meta={'action': action, 'state': state, 'type': 'virtual_line'}
+                )
+
+            # Motion Detection — Motion field
+            if 'Motion' in data_items:
+                motion = str(data_items['Motion'])
+                if motion not in ('1', 'true', 'True'):
+                    return None
+                window = source_items.get('Window', '0')
+                self.logger.info(
+                    f"[{self.camera_config.name}] Motion: window={window}"
+                )
+                return self._build_event(
+                    event_type=EventType.MOTION,
+                    severity=Severity.LOW,
+                    confidence=0.70,
+                    needs_claude=True,
+                    meta={'window': window, 'type': 'motion'}
+                )
+
+            # Tampering
+            if 'Tampering' in data_items:
+                val = str(data_items['Tampering'])
+                if val not in ('1', 'true', 'True'):
+                    return None
+                self.logger.info(f"[{self.camera_config.name}] Tampering detectado")
+                return self._build_event(
+                    event_type=EventType.TAMPER,
+                    severity=Severity.HIGH,
+                    confidence=0.95,
+                    needs_claude=False,
+                    meta={'type': 'tampering'}
+                )
+
+            # VideoAnalytics genérico — State sin Action
+            if 'State' in data_items and 'Action' not in data_items:
+                state = str(data_items['State'])
+                if state not in ('1', 'true', 'True'):
+                    return None
+                self.logger.info(
+                    f"[{self.camera_config.name}] VideoAnalytics: State={state}"
+                )
+                return self._build_event(
+                    event_type=EventType.INTRUSION,
+                    severity=Severity.MEDIUM,
+                    confidence=0.80,
+                    needs_claude=True,
+                    meta={'state': state, 'type': 'analytics'}
+                )
 
         except Exception as e:
-            self.logger.error(f"Error parseando notificación ONVIF: {e}")
-            return None
+            self.logger.error(f"Error parseando mensaje ONVIF: {e}")
 
-    def _extract_state(self, msg) -> Optional[bool]:
-        try:
-            if hasattr(msg, 'Message') and msg.Message:
-                m = msg.Message
-                if hasattr(m, '_value_1') and m._value_1:
-                    inner = m._value_1
-                    if hasattr(inner, 'Data') and inner.Data:
-                        items = getattr(inner.Data, 'SimpleItem', [])
-                        if not isinstance(items, list):
-                            items = [items]
-                        for item in items:
-                            if hasattr(item, 'Value'):
-                                val = str(item.Value).lower()
-                                if val in ('0', 'false', 'inactive'):
-                                    return False
-                                if val in ('1', 'true', 'active'):
-                                    return True
-        except Exception:
-            pass
-        return True
+        return None
+
+    def _build_event(self, event_type, severity, confidence,
+                     needs_claude, meta) -> SecurityEvent:
+        """Construye un SecurityEvent con snapshot."""
+        needs_ai = needs_claude or (confidence < CONFIDENCE_SKIP_AI)
+        snapshot = self._get_snapshot()
+
+        return SecurityEvent(
+            camera_id=self.camera_config.id,
+            camera_name=self.camera_config.name,
+            timestamp=datetime.now(),
+            source_type=SourceType.EDGE,
+            event_type=event_type,
+            severity=severity,
+            confidence=confidence,
+            snapshot=snapshot,
+            needs_ai_analysis=needs_ai,
+            raw_metadata={
+                **meta,
+                "source": "edge_analytics",
+                "camera_ip": self._host,
+            },
+        )
 
     def _get_snapshot(self) -> Optional[bytes]:
+        """Obtiene snapshot JPEG de la cámara."""
         try:
             import urllib.request
             url = f"http://{self._host}/onvif/snapshot"
