@@ -101,7 +101,7 @@ html, body {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   flex-shrink: 0;
-}
+	}
 
 .tab {
   display: flex;
@@ -158,6 +158,7 @@ html, body {
   flex-direction: column;
 }
 .page.active { display: flex; }
+#page-events.active { display: flex; }
 
 /* Scrollbar */
 .page::-webkit-scrollbar { width: 3px; }
@@ -633,25 +634,30 @@ html, body {
     </div>
 
     <!-- EVENTOS -->
-    <div class="page" id="page-events">
-      <div class="filter-scroll" id="filter-row">
-        <div class="filter-chip active" onclick="setFilter(this,'all')">Todos</div>
-        <div class="filter-chip" onclick="setFilter(this,'person')">👤 Personas</div>
-        <div class="filter-chip" onclick="setFilter(this,'vehicle')">🚗 Vehículos</div>
-        <div class="filter-chip" onclick="setFilter(this,'animal')">🐾 Animales</div>
-        <div class="filter-chip" onclick="setFilter(this,'intrusion')">⚠️ Intrusiones</div>
-        <div class="filter-chip" onclick="setFilter(this,'alerts')">🚨 Alertas</div>
-        <div class="filter-chip" onclick="setFilter(this,'no_threat')">✓ Sin amenaza</div>
+    <div class="page" id="page-events" style="padding:0;gap:0;overflow:hidden;display:none;flex-direction:column">
+      <!-- Filtros fijos — nunca hacen scroll -->
+      <div style="flex-shrink:0;background:var(--bg);border-bottom:1px solid var(--border);padding:10px 12px 8px;display:flex;flex-direction:column;gap:6px">
+        <div class="filter-scroll" id="filter-row">
+          <div class="filter-chip active" onclick="setFilter(this,'all')">Todos</div>
+          <div class="filter-chip" onclick="setFilter(this,'person')">👤 Personas</div>
+          <div class="filter-chip" onclick="setFilter(this,'vehicle')">🚗 Vehículos</div>
+          <div class="filter-chip" onclick="setFilter(this,'animal')">🐾 Animales</div>
+          <div class="filter-chip" onclick="setFilter(this,'intrusion')">⚠️ Intrusiones</div>
+          <div class="filter-chip" onclick="setFilter(this,'alerts')">🚨 Alertas</div>
+          <div class="filter-chip" onclick="setFilter(this,'no_threat')">✓ Sin amenaza</div>
+        </div>
+        <div class="filter-scroll" style="gap:6px">
+          <div class="filter-chip" onclick="setHours(this,1)">1H</div>
+          <div class="filter-chip active" onclick="setHours(this,24)">24H</div>
+          <div class="filter-chip" onclick="setHours(this,72)">3D</div>
+          <div class="filter-chip" onclick="setHours(this,168)">7D</div>
+        </div>
+        <div class="filter-scroll" id="camera-filter-row" style="gap:6px">
+          <div class="filter-chip active" onclick="setCamFilter(this,'all')">📹 Todas</div>
+        </div>
       </div>
-
-      <div class="filter-scroll" style="gap:6px">
-        <div class="filter-chip" onclick="setHours(this,1)">1H</div>
-        <div class="filter-chip active" onclick="setHours(this,24)">24H</div>
-        <div class="filter-chip" onclick="setHours(this,72)">3D</div>
-        <div class="filter-chip" onclick="setHours(this,168)">7D</div>
-      </div>
-
-      <div id="events-list"></div>
+      <!-- Lista con scroll propio -->
+      <div id="events-list" style="flex:1;overflow-y:auto;padding:12px"></div>
     </div>
 
     <!-- CÁMARAS -->
@@ -759,6 +765,7 @@ html, body {
 // ─── Config ───────────────────────────────────────────────
 const API = window.location.origin;
 let currentFilter = 'all';
+let currentCamera = 'all';
 let currentHours  = 24;
 let deferredPrompt = null;
 let notifEnabled   = false;
@@ -884,12 +891,20 @@ async function loadEvents() {
   let url = `${API}/api/events?hours=${currentHours}&limit=100&positive_only=true`;
   if (currentFilter === 'alerts') url += '&alerts_only=true';
   else if (currentFilter !== 'all') url += `&event_type=${currentFilter}`;
+  if (currentCamera !== 'all') url += `&camera_id=${currentCamera}`;
   try {
     const evts = await fetch(url).then(r=>r.json());
     document.getElementById('events-list').innerHTML = evts.length
       ? evts.map(renderEventCard).join('')
       : '<div class="empty"><div class="empty-icon">📋</div><div class="empty-text">Sin eventos</div></div>';
   } catch(e) {}
+}
+
+function setCamFilter(el, id) {
+  currentCamera = id;
+  document.querySelectorAll('#camera-filter-row .filter-chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  loadEvents();
 }
 
 function setFilter(el, f) {
@@ -925,6 +940,15 @@ async function loadCameras() {
           </div>
         </div>`).join('')
       : '<div class="empty"><div class="empty-icon">📹</div><div class="empty-text">Sin cámaras registradas</div></div>';
+
+    // Poblar chips de filtro en página de eventos
+    const row = document.getElementById('camera-filter-row');
+    if (row && cams.length) {
+      const extras = cams.map(c => `
+        <div class="filter-chip" onclick="setCamFilter(this,'${c.id}')">📹 ${c.name}</div>
+      `).join('');
+      row.innerHTML = `<div class="filter-chip active" onclick="setCamFilter(this,'all')">📹 Todas</div>` + extras;
+    }
   } catch(e) {}
 }
 
@@ -1078,6 +1102,7 @@ if ('serviceWorker' in navigator) {
 
 // ─── Auto-refresh ─────────────────────────────────────────
 loadHome();
+loadCameras();  // Pobla chips de cámara desde el arranque
 setInterval(loadHome, 15000);
 setInterval(loadAlerts, 20000);
 </script>

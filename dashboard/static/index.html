@@ -599,11 +599,12 @@ header {
   text-overflow: ellipsis;
 }
 
-.toast-close {
-  background: none; border: none;
-  color: var(--muted); cursor: pointer;
-  font-size: 18px; padding: 0;
+.camera-item.active {
+  background: rgba(0,212,255,0.08);
+  border-color: var(--accent);
+  color: var(--accent);
 }
+.camera-item.active .cam-dot { box-shadow: 0 0 5px var(--accent); }
 </style>
 </head>
 <body>
@@ -746,6 +747,7 @@ header {
 // --- Estado --------------------------------------------------
 const API = '';  // mismo origen -- FastAPI en :8000
 let currentFilter = 'all';
+let currentCamera = 'all';
 let currentHours  = 24;
 let lastEventId   = null;
 let knownAlerts   = new Set();
@@ -820,8 +822,13 @@ async function loadCameras() {
     $('m-cams').textContent = cams.length;
     const list = $('camera-list');
     if (!cams.length) { list.innerHTML = '<div class="camera-item"><div class="cam-dot offline"></div><div class="cam-name">Sin cámaras</div></div>'; return; }
-    list.innerHTML = cams.map(c => `
-      <div class="camera-item" onclick="filterByCamera('${c.id}')">
+    list.innerHTML = `
+      <div class="camera-item active" id="cam-all" onclick="filterByCamera('all', this)">
+        <div class="cam-dot online"></div>
+        <div class="cam-name">Todas las cámaras</div>
+      </div>
+    ` + cams.map(c => `
+      <div class="camera-item" id="cam-${c.id}" onclick="filterByCamera('${c.id}', this)">
         <div class="cam-dot ${c.enabled ? 'online' : 'offline'}"></div>
         <div class="cam-name">${c.name}</div>
         <div class="cam-count">${c.source_type}</div>
@@ -835,6 +842,7 @@ async function loadEvents() {
   let url = `${API}/api/events?hours=${currentHours}&limit=80`;
   if (currentFilter === 'alerts') url += '&alerts_only=true';
   else if (currentFilter !== 'all') url += `&event_type=${currentFilter}`;
+  if (currentCamera !== 'all') url += `&camera_id=${currentCamera}`;
   if (positiveOnly) url += '&positive_only=true';
 
   try {
@@ -971,12 +979,11 @@ function setHours(h) {
   loadEvents();
 }
 
-function filterByCamera(id) {
+function filterByCamera(id, el) {
+  currentCamera = id;
   document.querySelectorAll('.camera-item').forEach(c => c.classList.remove('active'));
-  event.target.closest('.camera-item').classList.add('active');
-  // Cargar eventos filtrados por cámara
-  fetch(`${API}/api/events?camera_id=${id}&hours=${currentHours}&limit=80`)
-    .then(r => r.json()).then(renderEvents);
+  if (el) el.classList.add('active');
+  loadEvents();
 }
 
 function showDetail(id) {

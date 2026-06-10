@@ -212,8 +212,8 @@ class EventDatabase:
             params.append(min_confidence)
         if positive_only:
             conditions.append(
-                "(event_type IN ('person','vehicle') AND confidence >= 0.5)"
-                " OR event_type IN ('intrusion','fire','gas','tamper')"
+                "((event_type IN ('person','vehicle') AND confidence >= 0.5)"
+                " OR event_type IN ('intrusion','fire','gas','tamper'))"
             )
 
         where = " AND ".join(conditions)
