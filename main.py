@@ -114,19 +114,38 @@ async def main():
     # ── Monitor de salud ─────────────────────────────────────────────
     health = HealthMonitor(notifier=notifier, db=core.db, check_interval=30)
     health.register_cameras(all_cameras)
+
+    # Registrar dispositivos de infraestructura desde la DB
+    from core.health_monitor import DeviceHealth
+    try:
+        infra_devices = core.db.get_infra_devices(enabled_only=True)
+        for d in infra_devices:
+            if d.get("monitor_health"):
+                health.register_device(DeviceHealth(
+                    device_id=d["id"],
+                    device_name=d["name"],
+                    device_type=d["device_type"],
+                    host=d["host"],
+                    port=int(d.get("port") or 80),
+                ))
+        logger.info(f"Infraestructura: {len(infra_devices)} dispositivo(s) cargados para monitoreo")
+    except Exception as e:
+        logger.warning(f"No se pudieron cargar infra_devices: {e}")
+
     await health.start()
     core.health_monitor = health
-    logger.info(f"Monitor de salud activo — {len(all_cameras)} dispositivo(s)")
+    logger.info(f"Monitor de salud activo — {len(health._devices)} dispositivo(s) total")
 
     # ── Dashboard web ────────────────────────────────────────────────
     import uvicorn
-    from dashboard.api import add_admin_routes, add_scanner_routes, add_health_routes
+    from dashboard.api import add_admin_routes, add_scanner_routes, add_health_routes, add_infra_routes
 
     app = create_app(core.db, config.api_port)
     add_push_routes(app, notifier, vapid)
     add_admin_routes(app, core.db)
     add_scanner_routes(app, core.db)
     add_health_routes(app, core)
+    add_infra_routes(app, core.db, core)
 
     dashboard_task = asyncio.create_task(
         uvicorn.Server(uvicorn.Config(

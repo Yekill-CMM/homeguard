@@ -81,6 +81,26 @@ CREATE TABLE IF NOT EXISTS system_config (
     value           TEXT NOT NULL,
     updated_at      TEXT NOT NULL
 );
+
+-- Dispositivos de infraestructura (NVR, routers, UPS, hubs, centrales)
+CREATE TABLE IF NOT EXISTS infra_devices (
+    id              TEXT PRIMARY KEY,
+    name            TEXT NOT NULL,
+    device_type     TEXT NOT NULL,  -- nvr | router | ups | server | hub | intrusion_panel | fire_panel | other
+    host            TEXT NOT NULL,  -- IP o hostname
+    port            INTEGER DEFAULT 80,
+    location        TEXT,           -- Descripción de ubicación física
+    brand           TEXT,
+    model           TEXT,
+    notes           TEXT,
+    enabled         INTEGER DEFAULT 1,
+    monitor_health  INTEGER DEFAULT 1,  -- 1 = incluir en HealthMonitor
+    created_at      TEXT NOT NULL,
+    updated_at      TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_infra_type ON infra_devices(device_type);
+CREATE INDEX IF NOT EXISTS idx_infra_enabled ON infra_devices(enabled);
 """
 
 
@@ -393,3 +413,98 @@ class EventDatabase:
             return os.path.getsize(self.db_path) / (1024 * 1024)
         except FileNotFoundError:
             return 0.0
+
+    # ------------------------------------------------------------------
+    # Dispositivos de infraestructura
+    # ------------------------------------------------------------------
+
+    def get_infra_devices(self, enabled_only: bool = False) -> list[dict]:
+        """Retorna todos los dispositivos de infraestructura."""
+        with self._connect() as conn:
+            if enabled_only:
+                rows = conn.execute(
+                    "SELECT * FROM infra_devices WHERE enabled=1 ORDER BY device_type, name"
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM infra_devices ORDER BY device_type, name"
+                ).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_infra_device(self, device_id: str) -> Optional[dict]:
+        """Retorna un dispositivo por ID."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM infra_devices WHERE id=?", (device_id,)
+            ).fetchone()
+        return dict(row) if row else None
+
+    def save_infra_device(self, device: dict) -> bool:
+        """Crea o actualiza un dispositivo de infraestructura."""
+        try:
+            now = datetime.now().isoformat()
+            with self._connect() as conn:
+                conn.execute("""
+                    INSERT OR REPLACE INTO infra_devices (
+                        id, name, device_type, host, port,
+                        location, brand, model, notes,
+                        enabled, monitor_health, created_at, updated_at
+                    ) VALUES (
+                        :id, :name, :device_type, :host, :port,
+                        :location, :brand, :model, :notes,
+                        :enabled, :monitor_health, :created_at, :updated_at
+                    )
+                """, {
+                    "id":             device["id"],
+                    "name":           device["name"],
+                    "device_type":    device["device_type"],
+                    "host":           device["host"],
+                    "port":           device.get("port", 80),
+                    "location":       device.get("location"),
+                    "brand":          device.get("brand"),
+                    "model":          device.get("model"),
+                    "notes":          device.get("notes"),
+                    "enabled":        1 if device.get("enabled", True) else 0,
+                    "monitor_health": 1 if device.get("monitor_health", True) else 0,
+                    "created_at":     device.get("created_at", now),
+                    "updated_at":     now,
+                })
+                conn.commit()
+            return True
+        except Exception as e:
+            logger.error(f"Error guardando infra_device {device.get('id')}: {e}")
+            return False
+
+    def update_infra_device(self, device_id: str, fields: dict) -> bool:
+        """Actualiza campos específicos de un dispositivo."""
+        try:
+            now = datetime.now().isoformat()
+            allowed = {"name", "device_type", "host", "port", "location",
+                       "brand", "model", "notes", "enabled", "monitor_health"}
+            updates = {k: v for k, v in fields.items() if k in allowed}
+            if not updates:
+                return False
+            updates["updated_at"] = now
+            set_clause = ", ".join(f"{k}=:{k}" for k in updates)
+            updates["_id"] = device_id
+            with self._connect() as conn:
+                conn.execute(
+                    f"UPDATE infra_devices SET {set_clause} WHERE id=:_id",
+                    updates
+                )
+                conn.commit()
+            return True
+        except Exception as e:
+            logger.error(f"Error actualizando infra_device {device_id}: {e}")
+            return False
+
+    def delete_infra_device(self, device_id: str) -> bool:
+        """Elimina un dispositivo de infraestructura."""
+        try:
+            with self._connect() as conn:
+                conn.execute("DELETE FROM infra_devices WHERE id=?", (device_id,))
+                conn.commit()
+            return True
+        except Exception as e:
+            logger.error(f"Error eliminando infra_device {device_id}: {e}")
+            return False

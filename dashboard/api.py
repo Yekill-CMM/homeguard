@@ -588,6 +588,146 @@ def add_admin_routes(app: FastAPI, db):
                 "users": users, "zones": zones, "devices": devices}
 
 
+def add_infra_routes(app: FastAPI, db, core=None):
+    """
+    CRUD completo para dispositivos de infraestructura.
+    Tipos: nvr | router | ups | server | hub | intrusion_panel | fire_panel | other
+    """
+    from pydantic import BaseModel
+    from typing import Optional as Opt
+    import uuid
+    import datetime as _dt
+
+    VALID_TYPES = {
+        "nvr", "router", "ups", "server",
+        "hub", "intrusion_panel", "fire_panel", "other"
+    }
+
+    class InfraDeviceIn(BaseModel):
+        name: str
+        device_type: str
+        host: str
+        port: int = 80
+        location: Opt[str] = None
+        brand: Opt[str] = None
+        model: Opt[str] = None
+        notes: Opt[str] = None
+        enabled: bool = True
+        monitor_health: bool = True
+
+    def _sync_health(device: dict):
+        if not core:
+            return
+        monitor = getattr(core, "health_monitor", None)
+        if not monitor:
+            return
+        if device.get("enabled") and device.get("monitor_health"):
+            from core.health_monitor import DeviceHealth
+            monitor.register_device(DeviceHealth(
+                device_id=device["id"],
+                device_name=device["name"],
+                device_type=device["device_type"],
+                host=device["host"],
+                port=int(device.get("port") or 80),
+            ))
+        else:
+            monitor._devices.pop(device["id"], None)
+
+    @app.get("/api/infra/devices")
+    async def infra_list(enabled_only: bool = False):
+        devices = db.get_infra_devices(enabled_only=enabled_only)
+        monitor = getattr(core, "health_monitor", None) if core else None
+        health_map = {s["device_id"]: s for s in monitor.get_status()} if monitor else {}
+        for d in devices:
+            h = health_map.get(d["id"])
+            d["health"] = {
+                "online":     h["online"],
+                "latency_ms": h["latency_ms"],
+                "last_seen":  h["last_seen"],
+            } if h else None
+        return devices
+
+    @app.get("/api/infra/devices/{device_id}")
+    async def infra_get(device_id: str):
+        from fastapi import HTTPException
+        d = db.get_infra_device(device_id)
+        if not d:
+            raise HTTPException(status_code=404, detail="Dispositivo no encontrado")
+        return d
+
+    @app.post("/api/infra/devices")
+    async def infra_create(body: InfraDeviceIn):
+        from fastapi import HTTPException
+        if body.device_type not in VALID_TYPES:
+            raise HTTPException(status_code=400,
+                detail=f"device_type invalido. Opciones: {', '.join(sorted(VALID_TYPES))}")
+        now = _dt.datetime.now().isoformat()
+        device = {
+            "id":             f"infra_{uuid.uuid4().hex[:8]}",
+            "name":           body.name,
+            "device_type":    body.device_type,
+            "host":           body.host,
+            "port":           body.port,
+            "location":       body.location,
+            "brand":          body.brand,
+            "model":          body.model,
+            "notes":          body.notes,
+            "enabled":        body.enabled,
+            "monitor_health": body.monitor_health,
+            "created_at":     now,
+            "updated_at":     now,
+        }
+        ok = db.save_infra_device(device)
+        if ok:
+            _sync_health(device)
+        return {"ok": ok, "id": device["id"]}
+
+    @app.put("/api/infra/devices/{device_id}")
+    async def infra_update(device_id: str, body: InfraDeviceIn):
+        from fastapi import HTTPException
+        if not db.get_infra_device(device_id):
+            raise HTTPException(status_code=404, detail="Dispositivo no encontrado")
+        if body.device_type not in VALID_TYPES:
+            raise HTTPException(status_code=400,
+                detail=f"device_type invalido. Opciones: {', '.join(sorted(VALID_TYPES))}")
+        ok = db.update_infra_device(device_id, body.model_dump())
+        if ok:
+            _sync_health(db.get_infra_device(device_id))
+        return {"ok": ok}
+
+    @app.patch("/api/infra/devices/{device_id}/toggle")
+    async def infra_toggle(device_id: str):
+        from fastapi import HTTPException
+        d = db.get_infra_device(device_id)
+        if not d:
+            raise HTTPException(status_code=404, detail="Dispositivo no encontrado")
+        new_state = not bool(d["enabled"])
+        ok = db.update_infra_device(device_id, {"enabled": new_state})
+        if ok:
+            _sync_health(db.get_infra_device(device_id))
+        return {"ok": ok, "enabled": new_state}
+
+    @app.delete("/api/infra/devices/{device_id}")
+    async def infra_delete(device_id: str):
+        monitor = getattr(core, "health_monitor", None) if core else None
+        if monitor:
+            monitor._devices.pop(device_id, None)
+        return {"ok": db.delete_infra_device(device_id)}
+
+    @app.get("/api/infra/device-types")
+    async def infra_types():
+        return [
+            {"value": "nvr",             "label": "NVR / Grabador"},
+            {"value": "router",          "label": "Router / Switch"},
+            {"value": "ups",             "label": "UPS / Fuente de poder"},
+            {"value": "server",          "label": "Servidor / NUC"},
+            {"value": "hub",             "label": "Hub / Central de sensores"},
+            {"value": "intrusion_panel", "label": "Central de intrusion"},
+            {"value": "fire_panel",      "label": "Central de incendio / gas"},
+            {"value": "other",           "label": "Otro"},
+        ]
+
+
 def add_scanner_routes(app: FastAPI, db):
     """Endpoints del escáner de red LAN."""
     from core.scanner import NetworkScanner
