@@ -602,6 +602,13 @@ header {
       </button>
     </div>
     <div class="nav-section">
+      <div class="nav-label">Infraestructura</div>
+      <button class="nav-item" onclick="showSection('infra', this)">
+        <span class="nav-icon">🖥️</span> Dispositivos
+        <span class="nav-count" id="cnt-infra">0</span>
+      </button>
+    </div>
+    <div class="nav-section">
       <div class="nav-label">Acceso</div>
       <button class="nav-item" onclick="showSection('users', this)">
         <span class="nav-icon">👤</span> Usuarios
@@ -748,6 +755,39 @@ header {
       <div class="items-grid" id="devices-list"></div>
     </div>
 
+    <!-- INFRAESTRUCTURA -->
+    <div class="section" id="section-infra">
+      <div class="page-header">
+        <div>
+          <div class="page-title">INFRAESTRUCTURA</div>
+          <div class="page-desc">NVR, routers, UPS, hubs, centrales de alarma y otros equipos de red</div>
+        </div>
+        <button class="add-btn" onclick="openInfraModal()">+ Nuevo dispositivo</button>
+      </div>
+
+      <!-- Stats de salud infraestructura -->
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px" id="infra-stats">
+        <div class="stat-card">
+          <div class="stat-val c-accent" id="inf-total">—</div>
+          <div class="stat-lbl">Total</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-val c-green" id="inf-online">—</div>
+          <div class="stat-lbl">Online</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-val c-red" id="inf-offline">—</div>
+          <div class="stat-lbl">Offline</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-val c-amber" id="inf-nomonitor">—</div>
+          <div class="stat-lbl">Sin monitoreo</div>
+        </div>
+      </div>
+
+      <div class="items-grid" id="infra-list"></div>
+    </div>
+
     <!-- SALUD DEL SISTEMA -->
     <div class="section" id="section-health">
       <div class="page-header">
@@ -827,6 +867,7 @@ async function loadSection(name) {
   if (name === 'users')     return loadUsers();
   if (name === 'devices')   return loadDevices();
   if (name === 'health')    return loadHealth();
+  if (name === 'infra')     return loadInfra();
 }
 
 // ─── Overview ─────────────────────────────────────────────
@@ -1479,6 +1520,184 @@ async function loadHealth() {
   }
 }
 
+// ─── Infraestructura ──────────────────────────────────────
+const INFRA_ICONS = {
+  nvr:             '🎬',
+  router:          '🌐',
+  ups:             '🔋',
+  server:          '🖥️',
+  hub:             '📡',
+  intrusion_panel: '🚨',
+  fire_panel:      '🔥',
+  other:           '🔌',
+};
+
+let infraTypes = [];
+let editingInfraId = null;
+
+async function loadInfraTypes() {
+  if (infraTypes.length) return;
+  try {
+    infraTypes = await fetch(`${API}/api/infra/device-types`).then(r => r.json());
+  } catch(e) {}
+}
+
+async function loadInfra() {
+  await loadInfraTypes();
+  const list = document.getElementById('infra-list');
+  list.innerHTML = '<div style="text-align:center;padding:30px;color:var(--muted);font-family:var(--mono);font-size:12px">Cargando...</div>';
+  try {
+    const devices = await fetch(`${API}/api/infra/devices`).then(r => r.json());
+    document.getElementById('cnt-infra').textContent = devices.length;
+
+    // Stats
+    const total     = devices.length;
+    const online    = devices.filter(d => d.health && d.health.online === true).length;
+    const offline   = devices.filter(d => d.health && d.health.online === false).length;
+    const nomonitor = devices.filter(d => !d.monitor_health || !d.health).length;
+    document.getElementById('inf-total').textContent     = total;
+    document.getElementById('inf-online').textContent    = online;
+    document.getElementById('inf-offline').textContent   = offline;
+    document.getElementById('inf-nomonitor').textContent = nomonitor;
+
+    if (!devices.length) {
+      list.innerHTML = emptyState('🖥️', 'Sin dispositivos de infraestructura', 'Agrega NVR, routers, UPS, centrales y otros equipos');
+      return;
+    }
+
+    list.innerHTML = devices.map(d => {
+      const icon = INFRA_ICONS[d.device_type] || '🔌';
+      const typeLabel = (infraTypes.find(t => t.value === d.device_type) || {}).label || d.device_type;
+      const h = d.health;
+      let statusHtml = '';
+      if (!d.monitor_health || !h) {
+        statusHtml = '<span class="badge badge-off">SIN PING</span>';
+      } else if (h.online === true) {
+        const ms = h.latency_ms ?? 0;
+        const col = ms > 300 ? 'var(--amber)' : 'var(--green)';
+        statusHtml = `<span class="badge" style="color:${col};border-color:${col}20;background:${col}15">● ${ms}ms</span>`;
+      } else if (h.online === false) {
+        statusHtml = '<span class="badge" style="color:var(--red);border-color:rgba(255,23,68,.2);background:rgba(255,23,68,.08)">○ OFFLINE</span>';
+      } else {
+        statusHtml = '<span class="badge badge-off">CHEQUEANDO</span>';
+      }
+
+      const meta = [d.host + (d.port ? ':' + d.port : ''), d.location, d.brand, d.model]
+        .filter(Boolean).join(' · ');
+
+      return `
+        <div class="item-card" id="icard-${d.id}">
+          <div class="item-icon" style="background:rgba(0,229,255,.08);font-size:20px">${icon}</div>
+          <div class="item-info">
+            <div class="item-name">${d.name}</div>
+            <div class="item-detail">${meta}</div>
+          </div>
+          <div class="item-actions">
+            <span class="badge badge-rtsp">${typeLabel}</span>
+            ${statusHtml}
+            <span class="badge ${d.enabled ? 'badge-on' : 'badge-off'}">${d.enabled ? 'ON' : 'OFF'}</span>
+            <button class="icon-btn" onclick="editInfraDevice('${d.id}')" title="Editar">✏️</button>
+            <button class="icon-btn" onclick="toggleInfraDevice('${d.id}', ${d.enabled})" title="${d.enabled ? 'Deshabilitar' : 'Habilitar'}">
+              ${d.enabled ? '⏸' : '▶'}
+            </button>
+            <button class="icon-btn danger" onclick="deleteInfraDevice('${d.id}', '${d.name.replace(/'/g,'')}')" title="Eliminar">🗑</button>
+          </div>
+        </div>`;
+    }).join('');
+  } catch(e) {
+    list.innerHTML = errorState();
+  }
+}
+
+function openInfraModal(data = {}) {
+  editingInfraId = data.id || null;
+  loadInfraTypes().then(() => {
+    const sel = document.getElementById('if-type');
+    sel.innerHTML = infraTypes.map(t =>
+      `<option value="${t.value}" ${data.device_type === t.value ? 'selected' : ''}>${t.label}</option>`
+    ).join('');
+  });
+  document.getElementById('infra-modal-title').textContent = data.id ? 'EDITAR DISPOSITIVO' : 'NUEVO DISPOSITIVO';
+  document.getElementById('if-name').value     = data.name     || '';
+  document.getElementById('if-host').value     = data.host     || '';
+  document.getElementById('if-port').value     = data.port     || 80;
+  document.getElementById('if-brand').value    = data.brand    || '';
+  document.getElementById('if-model').value    = data.model    || '';
+  document.getElementById('if-location').value = data.location || '';
+  document.getElementById('if-notes').value    = data.notes    || '';
+  const en = document.getElementById('if-enabled');
+  const mo = document.getElementById('if-monitor');
+  en.className = 'toggle-sw ' + (data.enabled !== false ? 'on' : '');
+  mo.className = 'toggle-sw ' + (data.monitor_health !== false ? 'on' : '');
+  document.getElementById('infra-modal-bg').classList.add('open');
+}
+
+function closeInfraModal() {
+  document.getElementById('infra-modal-bg').classList.remove('open');
+  editingInfraId = null;
+}
+
+async function saveInfraDevice() {
+  const v  = id => document.getElementById(id)?.value?.trim();
+  const on = id => document.getElementById(id)?.classList.contains('on') ?? true;
+  const name = v('if-name');
+  const host = v('if-host');
+  if (!name) { alert('El nombre es obligatorio'); return; }
+  if (!host) { alert('La IP / host es obligatoria'); return; }
+
+  const body = {
+    name,
+    device_type:    v('if-type'),
+    host,
+    port:           parseInt(v('if-port') || '80'),
+    brand:          v('if-brand') || null,
+    model:          v('if-model') || null,
+    location:       v('if-location') || null,
+    notes:          v('if-notes') || null,
+    enabled:        on('if-enabled'),
+    monitor_health: on('if-monitor'),
+  };
+
+  const url    = editingInfraId ? `${API}/api/infra/devices/${editingInfraId}` : `${API}/api/infra/devices`;
+  const method = editingInfraId ? 'PUT' : 'POST';
+
+  try {
+    const res = await fetch(url, {
+      method, headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }).then(r => r.json());
+    if (res.ok) {
+      closeInfraModal();
+      showSaved();
+      loadInfra();
+    } else {
+      alert('Error al guardar: ' + (res.detail || JSON.stringify(res)));
+    }
+  } catch(e) {
+    alert('Error de conexión');
+  }
+}
+
+async function editInfraDevice(id) {
+  try {
+    const d = await fetch(`${API}/api/infra/devices/${id}`).then(r => r.json());
+    openInfraModal(d);
+  } catch(e) { alert('Error cargando dispositivo'); }
+}
+
+async function toggleInfraDevice(id, currentEnabled) {
+  await fetch(`${API}/api/infra/devices/${id}/toggle`, { method: 'PATCH' });
+  showSaved();
+  loadInfra();
+}
+
+async function deleteInfraDevice(id, name) {
+  if (!confirm(`¿Eliminar "${name}"?\nSe quitará también del monitoreo de salud.`)) return;
+  await fetch(`${API}/api/infra/devices/${id}`, { method: 'DELETE' });
+  showSaved();
+  loadInfra();
+}
+
 // ─── Init ─────────────────────────────────────────────────
 loadOverview();
 </script>
@@ -1538,6 +1757,70 @@ loadOverview();
         Los dispositivos encontrados se pre-configuran automáticamente
       </div>
       <button class="btn-ghost" onclick="closeScanner()">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL INFRAESTRUCTURA -->
+<div class="modal-bg" id="infra-modal-bg" onclick="if(event.target===this)closeInfraModal()">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-header">
+      <div class="modal-title" id="infra-modal-title">NUEVO DISPOSITIVO</div>
+      <button class="modal-close" onclick="closeInfraModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Nombre</label>
+          <input class="form-input" id="if-name" placeholder="Ej: Router principal">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Tipo de dispositivo</label>
+          <select class="form-select" id="if-type"></select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">IP / Host</label>
+          <input class="form-input" id="if-host" placeholder="192.168.1.x">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Puerto</label>
+          <input class="form-input" id="if-port" type="number" placeholder="80" value="80">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Marca</label>
+          <input class="form-input" id="if-brand" placeholder="Ej: TP-Link">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Modelo</label>
+          <input class="form-input" id="if-model" placeholder="Ej: ER605">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Ubicación física</label>
+        <input class="form-input" id="if-location" placeholder="Ej: Rack sala de servidores">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Notas</label>
+        <input class="form-input" id="if-notes" placeholder="Información adicional">
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-top:4px">
+        <div class="form-toggle">
+          <span class="toggle-label">Habilitado</span>
+          <button class="toggle-sw on" id="if-enabled" onclick="this.classList.toggle('on')"></button>
+        </div>
+        <div class="form-toggle">
+          <span class="toggle-label">Monitorear conectividad (ping)</span>
+          <button class="toggle-sw on" id="if-monitor" onclick="this.classList.toggle('on')"></button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="closeInfraModal()">Cancelar</button>
+      <button class="btn-primary" onclick="saveInfraDevice()">Guardar</button>
     </div>
   </div>
 </div>
