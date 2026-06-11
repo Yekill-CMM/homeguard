@@ -814,27 +814,29 @@ function confClass(c) {
 
 function renderEventCard(e) {
   const isAlert = e.ai_alert === 1;
-  const cls = isAlert ? 'is-alert' : e.severity === 'medium' ? 'is-medium' : '';
-  const conf = e.confidence ?? 0;
-  const hasSnapshot = e.snapshot_path ? 'cursor:pointer' : '';
+  const cls     = isAlert ? 'is-alert' : e.severity === 'medium' ? 'is-medium' : '';
+  const conf    = e.confidence ?? 0;
+  const hasSnap = e.snapshot_path ? 'cursor:pointer' : '';
+  const evType  = e.event_type  || 'unknown';
+  const evCam   = (e.camera_name || '—').replace(/'/g, '');
+  const evTime  = e.timestamp ? fmtTime(e.timestamp) : '—';
   return `
-    <div class="event-card ${cls}" style="margin-bottom:8px;${hasSnapshot}" onclick="showSnapshot('${e.id}','${e.event_type}','${e.camera_name}','${fmtTime(e.timestamp)}')">
-      <div class="ev-icon ${e.event_type}">${ICONS[e.event_type]??'?'}</div>
+    <div class="event-card ${cls}" style="margin-bottom:8px;${hasSnap}" onclick="showSnapshot('${e.id}','${evType}','${evCam}','${evTime}')">
+      <div class="ev-icon ${evType}">${ICONS[evType]??'?'}</div>
       <div class="ev-body">
-        <div class="ev-title">${LABELS[e.event_type]??e.event_type}
+        <div class="ev-title">${LABELS[evType]??evType}
           ${isAlert ? '<span class="alert-pill">ALERTA</span>' : ''}
           ${e.snapshot_path ? '<span style="font-size:10px;color:var(--muted)">📸</span>' : ''}
         </div>
         <div class="ev-desc">${e.ai_description||'—'}</div>
         <div class="ev-meta">
-          <span class="ev-cam">📹 ${e.camera_name}</span>
+          <span class="ev-cam">📹 ${e.camera_name||'—'}</span>
           ${conf>0 ? `<span class="conf-pill ${confClass(conf)}">${Math.round(conf*100)}%</span>`:''}
-          <span class="ev-time">${fmtTime(e.timestamp)}</span>
+          <span class="ev-time">${evTime}</span>
         </div>
       </div>
     </div>`;
 }
-
 function showSnapshot(id, type, camera, time) {
   const modal = document.getElementById('mob-snapshot-modal');
   const img   = document.getElementById('mob-snapshot-img');
@@ -888,16 +890,27 @@ async function loadHome() {
 
 // ─── Eventos ──────────────────────────────────────────────
 async function loadEvents() {
+  const listEl = document.getElementById('events-list');
   let url = `${API}/api/events?hours=${currentHours}&limit=100&positive_only=true`;
   if (currentFilter === 'alerts') url += '&alerts_only=true';
   else if (currentFilter !== 'all') url += `&event_type=${currentFilter}`;
   if (currentCamera !== 'all') url += `&camera_id=${currentCamera}`;
   try {
-    const evts = await fetch(url).then(r=>r.json());
-    document.getElementById('events-list').innerHTML = evts.length
-      ? evts.map(renderEventCard).join('')
-      : '<div class="empty"><div class="empty-icon">📋</div><div class="empty-text">Sin eventos</div></div>';
-  } catch(e) {}
+    const evts = await fetch(url).then(r => r.json());
+    if (!evts.length) {
+      listEl.innerHTML = '<div class="empty"><div class="empty-icon">📋</div><div class="empty-text">Sin eventos</div></div>';
+      return;
+    }
+    const cards = [];
+    for (const e of evts) {
+      try { cards.push(renderEventCard(e)); }
+      catch(err) { console.warn('renderEventCard error', e.id, err); }
+    }
+    listEl.innerHTML = cards.join('') || '<div class="empty"><div class="empty-icon">📋</div><div class="empty-text">Sin eventos</div></div>';
+  } catch(err) {
+    console.error('loadEvents error:', err);
+    listEl.innerHTML = '<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-text">Error cargando eventos</div></div>';
+  }
 }
 
 function setCamFilter(el, id) {
@@ -1102,7 +1115,7 @@ if ('serviceWorker' in navigator) {
 
 // ─── Auto-refresh ─────────────────────────────────────────
 loadHome();
-loadEvents();  // Carga inicial de eventos
+loadEvents();   // Carga inicial de eventos
 loadCameras();  // Pobla chips de cámara desde el arranque
 setInterval(loadHome, 15000);
 setInterval(loadAlerts, 20000);
