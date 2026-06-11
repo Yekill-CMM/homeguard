@@ -286,7 +286,7 @@ def add_push_routes(app: FastAPI, notifier, vapid_manager):
         return {"ok": True, "devices": notifier.subscription_count()}
 
 
-def add_admin_routes(app: FastAPI, db):
+def add_admin_routes(app: FastAPI, db, core=None):
     """Endpoints de administración del sistema."""
     from pydantic import BaseModel
     from typing import Optional
@@ -460,6 +460,13 @@ def add_admin_routes(app: FastAPI, db):
             conn.execute("DELETE FROM camera_config WHERE id=?", (cam_id,))
             conn.execute("DELETE FROM cameras WHERE id=?", (cam_id,))
             conn.commit()
+        # Limpiar del HealthMonitor
+        monitor = getattr(core, "health_monitor", None) if core else None
+        if monitor:
+            monitor._devices.pop(cam_id, None)
+            monitor._alert_history = [
+                a for a in monitor._alert_history if a.device_id != cam_id
+            ]
         return {"ok": True}
 
     # ── SENSORES ─────────────────────────────────────────────
@@ -499,6 +506,13 @@ def add_admin_routes(app: FastAPI, db):
         with db._connect() as conn:
             conn.execute("DELETE FROM sensors WHERE id=?", (sid,))
             conn.commit()
+        # Limpiar del HealthMonitor
+        monitor = getattr(core, "health_monitor", None) if core else None
+        if monitor:
+            monitor._devices.pop(sid, None)
+            monitor._alert_history = [
+                a for a in monitor._alert_history if a.device_id != sid
+            ]
         return {"ok": True}
 
     # ── USUARIOS ─────────────────────────────────────────────

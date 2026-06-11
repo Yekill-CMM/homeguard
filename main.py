@@ -142,7 +142,7 @@ async def main():
 
     app = create_app(core.db, config.api_port)
     add_push_routes(app, notifier, vapid)
-    add_admin_routes(app, core.db)
+    add_admin_routes(app, core.db, core)
     add_scanner_routes(app, core.db)
     add_health_routes(app, core)
     add_infra_routes(app, core.db, core)
