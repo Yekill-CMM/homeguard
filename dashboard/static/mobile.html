@@ -1102,6 +1102,7 @@ if ('serviceWorker' in navigator) {
 
 // ─── Auto-refresh ─────────────────────────────────────────
 loadHome();
+loadEvents();  // Carga inicial de eventos
 loadCameras();  // Pobla chips de cámara desde el arranque
 setInterval(loadHome, 15000);
 setInterval(loadAlerts, 20000);
