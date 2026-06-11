@@ -885,24 +885,29 @@ async function loadHome() {
 // ─── Eventos ──────────────────────────────────────────────
 async function loadEvents() {
   const listEl = document.getElementById('events-list');
+  listEl.innerHTML = '<div class="empty"><div class="empty-icon">⏳</div><div class="empty-text">Cargando...</div></div>';
   let url = `${API}/api/events?hours=${currentHours}&limit=100&positive_only=true`;
   if (currentFilter === 'alerts') url += '&alerts_only=true';
   else if (currentFilter !== 'all') url += `&event_type=${currentFilter}`;
   try {
-    const evts = await fetch(url).then(r => r.json());
+    const resp = await fetch(url);
+    const evts = await resp.json();
+    if (!Array.isArray(evts)) {
+      listEl.innerHTML = `<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-text">Respuesta inesperada: ${JSON.stringify(evts).slice(0,100)}</div></div>`;
+      return;
+    }
     if (!evts.length) {
-      listEl.innerHTML = '<div class="empty"><div class="empty-icon">📋</div><div class="empty-text">Sin eventos</div></div>';
+      listEl.innerHTML = `<div class="empty"><div class="empty-icon">📋</div><div class="empty-text">Sin eventos (url: ${url})</div></div>`;
       return;
     }
     const cards = [];
     for (const e of evts) {
       try { cards.push(renderEventCard(e)); }
-      catch(err) { console.warn('renderEventCard error', e.id, err); }
+      catch(err) { cards.push(`<div class="empty"><div class="empty-text">Error en evento ${e.id}: ${err.message}</div></div>`); }
     }
-    listEl.innerHTML = cards.join('') || '<div class="empty"><div class="empty-icon">📋</div><div class="empty-text">Sin eventos</div></div>';
+    listEl.innerHTML = cards.join('');
   } catch(err) {
-    console.error('loadEvents error:', err);
-    listEl.innerHTML = '<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-text">Error cargando eventos</div></div>';
+    listEl.innerHTML = `<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-text">Error: ${err.message}</div></div>`;
   }
 }
 
@@ -1092,7 +1097,7 @@ if ('serviceWorker' in navigator) {
 
 // ─── Auto-refresh ─────────────────────────────────────────
 loadHome();
-loadEvents();   // Carga inicial de eventos
+loadEvents();
 setInterval(loadHome, 15000);
 setInterval(loadAlerts, 20000);
 </script>
