@@ -602,6 +602,142 @@ def add_admin_routes(app: FastAPI, db, core=None):
                 "users": users, "zones": zones, "devices": devices}
 
 
+def add_audio_routes(app: FastAPI, db, core=None):
+    """
+    Endpoints de audio para HomeGuard AI.
+    Recibe webhooks de Home Assistant con eventos de sonido detectados.
+
+    Payload esperado de HA:
+    {
+      "sound_type": "scream|glass|bark|alarm|cry|voice|noise",
+      "confidence": 0.95,
+      "zone": "Sala principal",
+      "device_name": "Micrófono sala",
+      "duration_ms": 1200,
+      "db_level": 72.5
+    }
+    """
+    import uuid as _uuid
+    import datetime as _dt
+    import json as _json
+
+    # Tipos válidos y sus etiquetas para UI
+    SOUND_TYPES = {
+        "scream": {"label": "Grito",           "emoji": "😱", "severity": "critical"},
+        "glass":  {"label": "Cristal roto",    "emoji": "🪟", "severity": "critical"},
+        "alarm":  {"label": "Sirena / alarma", "emoji": "🚨", "severity": "critical"},
+        "cry":    {"label": "Llanto",          "emoji": "😢", "severity": "high"},
+        "bark":   {"label": "Ladrido",         "emoji": "🐕", "severity": "medium"},
+        "voice":  {"label": "Voz detectada",   "emoji": "🗣️", "severity": "medium"},
+        "noise":  {"label": "Ruido anormal",   "emoji": "🔊", "severity": "low"},
+    }
+
+    async def _send_audio_alert(event: dict):
+        """Envía notificación push para eventos críticos/high."""
+        notifier = getattr(core, "notifier", None) if core else None
+        if not notifier:
+            return
+        info = SOUND_TYPES.get(event["sound_type"], {})
+        severity = info.get("severity", "low")
+        if severity not in ("critical", "high"):
+            return
+        emoji = info.get("emoji", "🔊")
+        label = info.get("label", event["sound_type"])
+        zone  = event.get("zone", "Zona desconocida")
+        conf  = int(event.get("confidence", 0) * 100)
+        await notifier.notify_raw(
+            title=f"{emoji} {label} detectado",
+            body=f"{zone} — Confianza {conf}%",
+            severity=severity,
+        )
+
+    # ── POST /api/audio/event — receptor webhook de HA ──────
+    @app.post("/api/audio/event")
+    async def audio_webhook(body: dict):
+        """
+        Receptor de webhooks desde Home Assistant.
+        HA llama a este endpoint cuando detecta un sonido clasificado.
+        """
+        sound_type = body.get("sound_type", "noise").lower()
+        if sound_type not in SOUND_TYPES:
+            sound_type = "noise"
+
+        info = SOUND_TYPES[sound_type]
+        now  = _dt.datetime.now().isoformat()
+
+        event = {
+            "id":          str(_uuid.uuid4()),
+            "timestamp":   body.get("timestamp", now),
+            "sound_type":  sound_type,
+            "confidence":  float(body.get("confidence", 0.0)),
+            "zone":        body.get("zone"),
+            "device_name": body.get("device_name"),
+            "duration_ms": body.get("duration_ms"),
+            "db_level":    body.get("db_level"),
+            "severity":    info["severity"],
+            "raw_payload": body,
+        }
+
+        ok = db.save_audio_event(event)
+
+        if ok:
+            import asyncio
+            asyncio.create_task(_send_audio_alert(event))
+
+        logger.info(
+            f"[Audio] {info['emoji']} {info['label']} — "
+            f"zona: {event.get('zone','?')} — "
+            f"confianza: {int(event['confidence']*100)}%"
+        )
+        return {"ok": ok, "id": event["id"], "severity": info["severity"]}
+
+    # ── GET /api/audio/events — listado con filtros ──────────
+    @app.get("/api/audio/events")
+    async def audio_events(
+        sound_type: str = None,
+        severity:   str = None,
+        hours:      int = 24,
+        limit:      int = 100,
+        offset:     int = 0,
+    ):
+        return db.get_audio_events(
+            sound_type=sound_type,
+            severity=severity,
+            hours=hours,
+            limit=limit,
+            offset=offset,
+        )
+
+    # ── GET /api/audio/summary — resumen para dashboard ─────
+    @app.get("/api/audio/summary")
+    async def audio_summary(hours: int = 24):
+        return db.get_audio_summary(hours=hours)
+
+    # ── GET /api/audio/sound-types — catálogo ───────────────
+    @app.get("/api/audio/sound-types")
+    async def audio_sound_types():
+        return [
+            {"value": k, "label": v["label"],
+             "emoji": v["emoji"], "severity": v["severity"]}
+            for k, v in SOUND_TYPES.items()
+        ]
+
+    # ── POST /api/audio/test — simular evento para pruebas ──
+    @app.post("/api/audio/test")
+    async def audio_test(body: dict):
+        """Simula un evento de audio para probar la integración."""
+        sound_type = body.get("sound_type", "bark")
+        test_payload = {
+            "sound_type":  sound_type,
+            "confidence":  body.get("confidence", 0.92),
+            "zone":        body.get("zone", "Sala principal"),
+            "device_name": "TEST — Simulación",
+            "duration_ms": 800,
+            "db_level":    65.0,
+        }
+        return await audio_webhook(test_payload)
+
+
 def add_infra_routes(app: FastAPI, db, core=None):
     """
     CRUD completo para dispositivos de infraestructura.

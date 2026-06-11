@@ -138,7 +138,7 @@ async def main():
 
     # ── Dashboard web ────────────────────────────────────────────────
     import uvicorn
-    from dashboard.api import add_admin_routes, add_scanner_routes, add_health_routes, add_infra_routes
+    from dashboard.api import add_admin_routes, add_scanner_routes, add_health_routes, add_infra_routes, add_audio_routes
 
     app = create_app(core.db, config.api_port)
     add_push_routes(app, notifier, vapid)
@@ -146,6 +146,7 @@ async def main():
     add_scanner_routes(app, core.db)
     add_health_routes(app, core)
     add_infra_routes(app, core.db, core)
+    add_audio_routes(app, core.db, core)
 
     dashboard_task = asyncio.create_task(
         uvicorn.Server(uvicorn.Config(

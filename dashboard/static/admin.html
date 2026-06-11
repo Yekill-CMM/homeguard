@@ -607,6 +607,10 @@ header {
         <span class="nav-icon">🖥️</span> Dispositivos
         <span class="nav-count" id="cnt-infra">0</span>
       </button>
+      <button class="nav-item" onclick="showSection('audio', this)">
+        <span class="nav-icon">🎙️</span> Audio
+        <span class="nav-count" id="cnt-audio">0</span>
+      </button>
     </div>
     <div class="nav-section">
       <div class="nav-label">Acceso</div>
@@ -755,6 +759,70 @@ header {
       <div class="items-grid" id="devices-list"></div>
     </div>
 
+    <!-- AUDIO -->
+    <div class="section" id="section-audio">
+      <div class="page-header">
+        <div>
+          <div class="page-title">MONITOREO DE AUDIO</div>
+          <div class="page-desc">Eventos detectados por Home Assistant — gritos, cristales, ladridos, alarmas</div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn-ghost" onclick="testAudioEvent()" style="font-size:13px;padding:9px 16px">⚡ Simular evento</button>
+          <button class="btn-ghost" onclick="loadAudio()" style="font-size:13px;padding:9px 16px">↻ Actualizar</button>
+        </div>
+      </div>
+
+      <!-- Stats -->
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px">
+        <div class="stat-card">
+          <div class="stat-val c-accent" id="au-total">—</div>
+          <div class="stat-lbl">Últimas 24h</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-val c-red" id="au-critical">—</div>
+          <div class="stat-lbl">Críticos / Altos</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-val c-amber" id="au-top-type">—</div>
+          <div class="stat-lbl">Tipo más frecuente</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-val c-green" id="au-status">OK</div>
+          <div class="stat-lbl">Estado HA</div>
+        </div>
+      </div>
+
+      <!-- Filtros -->
+      <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap" id="audio-filters">
+        <button class="badge badge-admin" style="cursor:pointer;padding:6px 14px;font-size:12px" onclick="filterAudio(null, this)">Todos</button>
+        <button class="badge badge-off" style="cursor:pointer;padding:6px 14px;font-size:12px" onclick="filterAudio('scream', this)">😱 Gritos</button>
+        <button class="badge badge-off" style="cursor:pointer;padding:6px 14px;font-size:12px" onclick="filterAudio('glass', this)">🪟 Cristales</button>
+        <button class="badge badge-off" style="cursor:pointer;padding:6px 14px;font-size:12px" onclick="filterAudio('alarm', this)">🚨 Alarmas</button>
+        <button class="badge badge-off" style="cursor:pointer;padding:6px 14px;font-size:12px" onclick="filterAudio('cry', this)">😢 Llanto</button>
+        <button class="badge badge-off" style="cursor:pointer;padding:6px 14px;font-size:12px" onclick="filterAudio('bark', this)">🐕 Ladridos</button>
+        <button class="badge badge-off" style="cursor:pointer;padding:6px 14px;font-size:12px" onclick="filterAudio('voice', this)">🗣️ Voces</button>
+        <button class="badge badge-off" style="cursor:pointer;padding:6px 14px;font-size:12px" onclick="filterAudio('noise', this)">🔊 Ruido</button>
+      </div>
+
+      <!-- Lista de eventos -->
+      <div class="items-grid" id="audio-list"></div>
+
+      <!-- Info de integración HA -->
+      <div style="margin-top:28px;background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:20px 24px">
+        <div style="font-family:var(--mono);font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:12px">INTEGRACIÓN HOME ASSISTANT</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:12px">
+          Configura Home Assistant para enviar eventos al siguiente webhook:
+        </div>
+        <div style="background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:12px 16px;font-family:var(--mono);font-size:12px;color:var(--accent);word-break:break-all" id="audio-webhook-url">
+          http://192.168.1.91:8000/api/audio/event
+        </div>
+        <div style="margin-top:12px;font-family:var(--mono);font-size:11px;color:var(--muted)">
+          Payload esperado (POST JSON):<br>
+          <span style="color:var(--text)">{ "sound_type": "scream|glass|bark|alarm|cry|voice|noise", "confidence": 0.95, "zone": "Sala", "device_name": "Mic sala", "duration_ms": 1200, "db_level": 72.5 }</span>
+        </div>
+      </div>
+    </div>
+
     <!-- INFRAESTRUCTURA -->
     <div class="section" id="section-infra">
       <div class="page-header">
@@ -868,6 +936,7 @@ async function loadSection(name) {
   if (name === 'devices')   return loadDevices();
   if (name === 'health')    return loadHealth();
   if (name === 'infra')     return loadInfra();
+  if (name === 'audio')     return loadAudio();
 }
 
 // ─── Overview ─────────────────────────────────────────────
@@ -1517,6 +1586,120 @@ async function loadHealth() {
 
   } catch(e) {
     console.warn('Error cargando salud:', e);
+  }
+}
+
+// ─── Audio ────────────────────────────────────────────────
+const AUDIO_SEVERITY_COLORS = {
+  critical: "var(--red)",
+  high:     "var(--amber)",
+  medium:   "var(--accent)",
+  low:      "var(--muted)",
+};
+const AUDIO_EMOJIS = {
+  scream: "😱", glass: "🪟", alarm: "🚨",
+  cry: "😢", bark: "🐕", voice: "🗣️", noise: "🔊",
+};
+const AUDIO_LABELS = {
+  scream: "Grito", glass: "Cristal roto", alarm: "Sirena / alarma",
+  cry: "Llanto", bark: "Ladrido", voice: "Voz detectada", noise: "Ruido anormal",
+};
+
+let audioFilter = null;
+
+async function loadAudio() {
+  const list = document.getElementById('audio-list');
+  list.innerHTML = '<div style="text-align:center;padding:30px;color:var(--muted);font-family:var(--mono);font-size:12px">Cargando...</div>';
+
+  try {
+    const [summary, events] = await Promise.all([
+      fetch(`${API}/api/audio/summary?hours=24`).then(r => r.json()),
+      fetch(`${API}/api/audio/events?hours=24&limit=50${audioFilter ? '&sound_type='+audioFilter : ''}`).then(r => r.json()),
+    ]);
+
+    // Stats
+    document.getElementById('au-total').textContent    = summary.total ?? 0;
+    document.getElementById('au-critical').textContent = summary.critical ?? 0;
+    document.getElementById('cnt-audio').textContent   = summary.total ?? 0;
+    const topType = summary.by_type?.[0];
+    document.getElementById('au-top-type').textContent = topType
+      ? (AUDIO_EMOJIS[topType.sound_type] || '🔊')
+      : '—';
+    document.getElementById('au-status').textContent = 'OK';
+
+    // Actualizar URL del webhook con la IP real
+    const urlEl = document.getElementById('audio-webhook-url');
+    if (urlEl) urlEl.textContent = `${window.location.origin}/api/audio/event`;
+
+    if (!events.length) {
+      list.innerHTML = emptyState('🎙️', 'Sin eventos de audio', audioFilter
+        ? 'No hay eventos de este tipo en las últimas 24h'
+        : 'Configura Home Assistant para enviar eventos al webhook');
+      return;
+    }
+
+    list.innerHTML = events.map(e => {
+      const emoji    = AUDIO_EMOJIS[e.sound_type]  || '🔊';
+      const label    = AUDIO_LABELS[e.sound_type]   || e.sound_type;
+      const color    = AUDIO_SEVERITY_COLORS[e.severity] || 'var(--muted)';
+      const conf     = Math.round((e.confidence || 0) * 100);
+      const time     = new Date(e.timestamp).toLocaleString('es-CL');
+      const zone     = e.zone     || 'Zona no especificada';
+      const device   = e.device_name || '';
+      const db       = e.db_level != null ? `${e.db_level.toFixed(1)} dB` : '';
+      const dur      = e.duration_ms  != null ? `${e.duration_ms}ms` : '';
+      const meta     = [zone, device, db, dur].filter(Boolean).join(' · ');
+      return `
+        <div class="item-card" style="border-left:3px solid ${color}">
+          <div class="item-icon" style="background:${color}18;font-size:22px">${emoji}</div>
+          <div class="item-info">
+            <div class="item-name">${label}</div>
+            <div class="item-detail">${meta}</div>
+            <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:3px">${time}</div>
+          </div>
+          <div class="item-actions">
+            <span class="badge" style="color:${color};border-color:${color}30;background:${color}12">
+              ${e.severity.toUpperCase()}
+            </span>
+            <span class="badge badge-off">${conf}%</span>
+            ${e.alert_sent ? '<span class="badge badge-on">PUSH ✓</span>' : ''}
+          </div>
+        </div>`;
+    }).join('');
+
+  } catch(e) {
+    list.innerHTML = errorState();
+    document.getElementById('au-status').textContent = 'ERROR';
+    document.getElementById('au-status').style.color = 'var(--red)';
+  }
+}
+
+function filterAudio(type, btn) {
+  audioFilter = type;
+  document.querySelectorAll('#audio-filters .badge').forEach(b => {
+    b.className = 'badge badge-off';
+    b.style.cssText = 'cursor:pointer;padding:6px 14px;font-size:12px';
+  });
+  btn.className = 'badge badge-admin';
+  btn.style.cssText = 'cursor:pointer;padding:6px 14px;font-size:12px';
+  loadAudio();
+}
+
+async function testAudioEvent() {
+  const types = ['bark', 'scream', 'glass', 'alarm', 'cry', 'voice', 'noise'];
+  const type  = types[Math.floor(Math.random() * types.length)];
+  try {
+    const res = await fetch(`${API}/api/audio/test`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sound_type: type, zone: 'Sala principal — TEST' }),
+    }).then(r => r.json());
+    if (res.ok) {
+      showSaved();
+      loadAudio();
+    }
+  } catch(e) {
+    alert('Error simulando evento de audio');
   }
 }
 

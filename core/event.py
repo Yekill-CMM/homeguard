@@ -18,6 +18,7 @@ class SourceType(str, Enum):
     SENSOR    = "sensor"  # Sensor IoT (PIR, humo, gas) vía MQTT
     WEBHOOK   = "webhook" # Cámara envió HTTP event (Reolink, Tapo)
     MANUAL    = "manual"  # Generado manualmente (tests, dashboard)
+    AUDIO     = "audio"   # Evento de audio (Home Assistant / micrófono)
 
 
 class EventType(str, Enum):
@@ -33,6 +34,14 @@ class EventType(str, Enum):
     TAMPER       = "tamper"      # Manipulación de cámara
     NO_THREAT    = "no_threat"   # Analizado — sin amenaza
     UNKNOWN      = "unknown"     # No clasificado aún
+    # ── Audio ──────────────────────────────────────────────
+    AUDIO_SCREAM     = "audio_scream"     # Grito / voz de alarma
+    AUDIO_GLASS      = "audio_glass"      # Cristal roto
+    AUDIO_BARK       = "audio_bark"       # Ladrido de perro
+    AUDIO_ALARM      = "audio_alarm"      # Sirena / alarma
+    AUDIO_CRY        = "audio_cry"        # Llanto
+    AUDIO_VOICE      = "audio_voice"      # Voz / conversación detectada
+    AUDIO_NOISE      = "audio_noise"      # Ruido anormal (nivel alto)
 
 
 class Severity(str, Enum):

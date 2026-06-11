@@ -101,6 +101,26 @@ CREATE TABLE IF NOT EXISTS infra_devices (
 
 CREATE INDEX IF NOT EXISTS idx_infra_type ON infra_devices(device_type);
 CREATE INDEX IF NOT EXISTS idx_infra_enabled ON infra_devices(enabled);
+
+-- Eventos de audio (Home Assistant / micrófonos)
+CREATE TABLE IF NOT EXISTS audio_events (
+    id              TEXT PRIMARY KEY,
+    timestamp       TEXT NOT NULL,
+    sound_type      TEXT NOT NULL,  -- scream | glass | bark | alarm | cry | voice | noise
+    confidence      REAL DEFAULT 0.0,
+    zone            TEXT,           -- Zona o ubicación del micrófono
+    device_name     TEXT,           -- Nombre del dispositivo HA que detectó
+    duration_ms     INTEGER,        -- Duración del sonido detectado
+    db_level        REAL,           -- Nivel en decibeles (si disponible)
+    severity        TEXT NOT NULL,  -- low | medium | high | critical
+    alert_sent      INTEGER DEFAULT 0,
+    raw_payload     TEXT,           -- JSON original de HA
+    created_at      TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_audio_timestamp  ON audio_events(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_audio_sound_type ON audio_events(sound_type);
+CREATE INDEX IF NOT EXISTS idx_audio_severity   ON audio_events(severity);
 """
 
 
@@ -508,3 +528,108 @@ class EventDatabase:
         except Exception as e:
             logger.error(f"Error eliminando infra_device {device_id}: {e}")
             return False
+
+    # ------------------------------------------------------------------
+    # Eventos de audio
+    # ------------------------------------------------------------------
+
+    # Severidad por tipo de sonido
+    AUDIO_SEVERITY = {
+        "scream": "critical",
+        "glass":  "critical",
+        "alarm":  "critical",
+        "cry":    "high",
+        "bark":   "medium",
+        "voice":  "medium",
+        "noise":  "low",
+    }
+
+    def save_audio_event(self, event: dict) -> bool:
+        """Persiste un evento de audio en la base de datos."""
+        try:
+            import json as _json
+            sound_type = event.get("sound_type", "noise")
+            severity = event.get("severity") or self.AUDIO_SEVERITY.get(sound_type, "low")
+            now = datetime.now().isoformat()
+            with self._connect() as conn:
+                conn.execute("""
+                    INSERT OR REPLACE INTO audio_events (
+                        id, timestamp, sound_type, confidence,
+                        zone, device_name, duration_ms, db_level,
+                        severity, alert_sent, raw_payload, created_at
+                    ) VALUES (
+                        :id, :timestamp, :sound_type, :confidence,
+                        :zone, :device_name, :duration_ms, :db_level,
+                        :severity, :alert_sent, :raw_payload, :created_at
+                    )
+                """, {
+                    "id":          event.get("id", str(__import__("uuid").uuid4())),
+                    "timestamp":   event.get("timestamp", now),
+                    "sound_type":  sound_type,
+                    "confidence":  event.get("confidence", 0.0),
+                    "zone":        event.get("zone"),
+                    "device_name": event.get("device_name"),
+                    "duration_ms": event.get("duration_ms"),
+                    "db_level":    event.get("db_level"),
+                    "severity":    severity,
+                    "alert_sent":  1 if event.get("alert_sent") else 0,
+                    "raw_payload": _json.dumps(event.get("raw_payload", {})),
+                    "created_at":  now,
+                })
+                conn.commit()
+            return True
+        except Exception as e:
+            logger.error(f"Error guardando audio_event: {e}")
+            return False
+
+    def get_audio_events(
+        self,
+        sound_type: Optional[str] = None,
+        severity: Optional[str] = None,
+        hours: int = 24,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[dict]:
+        """Consulta eventos de audio con filtros."""
+        since = (datetime.now() - timedelta(hours=hours)).isoformat()
+        conditions = ["timestamp >= ?"]
+        params: list = [since]
+        if sound_type:
+            conditions.append("sound_type = ?")
+            params.append(sound_type)
+        if severity:
+            conditions.append("severity = ?")
+            params.append(severity)
+        where = " AND ".join(conditions)
+        params += [limit, offset]
+        with self._connect() as conn:
+            rows = conn.execute(f"""
+                SELECT * FROM audio_events
+                WHERE {where}
+                ORDER BY timestamp DESC
+                LIMIT ? OFFSET ?
+            """, params).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_audio_summary(self, hours: int = 24) -> dict:
+        """Resumen de eventos de audio para el dashboard."""
+        since = (datetime.now() - timedelta(hours=hours)).isoformat()
+        with self._connect() as conn:
+            total = conn.execute(
+                "SELECT COUNT(*) FROM audio_events WHERE timestamp >= ?", (since,)
+            ).fetchone()[0]
+            critical = conn.execute(
+                "SELECT COUNT(*) FROM audio_events WHERE timestamp >= ? AND severity IN ('critical','high')",
+                (since,)
+            ).fetchone()[0]
+            by_type = conn.execute("""
+                SELECT sound_type, COUNT(*) as cnt
+                FROM audio_events WHERE timestamp >= ?
+                GROUP BY sound_type ORDER BY cnt DESC
+            """, (since,)).fetchall()
+        return {
+            "total":    total,
+            "critical": critical,
+            "by_type":  [dict(r) for r in by_type],
+            "hours":    hours,
+        }
