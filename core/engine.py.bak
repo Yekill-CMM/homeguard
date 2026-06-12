@@ -80,11 +80,6 @@ class HomeGuardCore:
         }
 
     async def handle_event(self, event: SecurityEvent):
-        presence = getattr(self, "presence", None)
-        if presence and not presence.should_process_event(
-                getattr(event, "event_type", ""),
-                getattr(event, "camera_id", -1)):
-            return
         """Punto de entrada principal — llamado por los adaptadores."""
         self._stats["events_received"] += 1
 

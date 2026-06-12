@@ -21,7 +21,6 @@ from adapters.mqtt_adapter import MQTTAdapter
 from dashboard.api import create_app, add_push_routes
 from notifications.vapid import VAPIDManager
 from notifications.push import PushNotifier
-from presence import PresenceMonitor, add_presence_routes
 
 logging.basicConfig(
     level=logging.INFO,
@@ -53,21 +52,6 @@ async def main():
     notifier = PushNotifier(core.db, vapid)
     core.notifier = notifier
     logger.info(f"Push notifications listas — {notifier.subscription_count()} dispositivo(s)")
-
-    # -- Monitor de presencia y armado --
-    presence = PresenceMonitor(
-        db_path=os.path.expanduser("~/homeguard/data/homeguard.db"),
-        auto_arm=True,
-        on_arrival=lambda dev: logger.info(
-            f"{dev.person_name} llegó a casa ({dev.device_name})"),
-        on_departure=lambda dev: logger.info(
-            f"{dev.person_name} salió de casa"),
-        on_mode_change=lambda old, new, by: logger.info(
-            f"Armado: {old} -> {new} ({by})"),
-    )
-    core.presence = presence
-    presence.start()
-    logger.info("Monitor de presencia activo")
 
     # ── Cargar cámaras desde DB con fallback a settings.py ──────────
     db_cameras = []
@@ -157,8 +141,6 @@ async def main():
     from dashboard.api import add_admin_routes, add_scanner_routes, add_health_routes, add_infra_routes, add_audio_routes
 
     app = create_app(core.db, config.api_port)
-
-    add_presence_routes(app, presence)
     add_push_routes(app, notifier, vapid)
     add_admin_routes(app, core.db, core)
     add_scanner_routes(app, core.db)
