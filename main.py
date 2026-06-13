@@ -128,7 +128,7 @@ async def main():
     logger.info("Pipeline corriendo. Ctrl+C para detener.")
 
     # ── Monitor de salud ─────────────────────────────────────────────
-    health = HealthMonitor(notifier=notifier, db=core.db, check_interval=30)
+    health = HealthMonitor(notifier=notifier, db=core.db, check_interval=30, data_dir="~/homeguard/data")
     health.register_cameras(all_cameras)
 
     # Registrar dispositivos de infraestructura desde la DB
