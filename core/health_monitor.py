@@ -79,6 +79,10 @@ class HealthMonitor:
         self._prev_internet_ok: Optional[bool] = None
         self._prev_disk_status: Optional[str]  = None   # "OK" | "WARNING" | "CRITICAL"
 
+        # Crear tabla de log persistente
+        if self.db:
+            self._ensure_health_events_table()
+
     def register_device(self, device: DeviceHealth):
         """Registra un dispositivo para monitoreo."""
         self._devices[device.device_id] = device
@@ -408,23 +412,47 @@ class HealthMonitor:
                 severity=severity,
             )
 
-    def _save_alert_to_db(self, alert: HealthAlert):
-        """Guarda la alerta en la tabla system_config de la DB."""
+    def _ensure_health_events_table(self) -> None:
+        """Crea la tabla health_events si no existe."""
         try:
-            import json
-            key = f"health_alert_{alert.device_id}_{int(alert.timestamp.timestamp())}"
-            value = json.dumps({
-                "device_name": alert.device_name,
-                "alert_type":  alert.alert_type,
-                "message":     alert.message,
-                "timestamp":   alert.timestamp.isoformat(),
-            })
             with self.db._connect() as conn:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS health_events (
+                        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                        timestamp   TEXT    NOT NULL,
+                        component   TEXT    NOT NULL,
+                        device_name TEXT    NOT NULL,
+                        device_type TEXT    NOT NULL,
+                        alert_type  TEXT    NOT NULL,
+                        message     TEXT,
+                        is_recovery INTEGER NOT NULL DEFAULT 0
+                    )
+                """)
                 conn.execute(
-                    """INSERT OR REPLACE INTO system_config (key, value, updated_at)
-                       VALUES (?, ?, ?)""",
-                    (key, value, alert.timestamp.isoformat()),
+                    "CREATE INDEX IF NOT EXISTS idx_hev_ts ON health_events(timestamp)"
                 )
+                conn.commit()
+        except Exception as e:
+            logger.warning(f"No se pudo crear tabla health_events: {e}")
+
+    def _save_alert_to_db(self, alert: HealthAlert):
+        """Persiste la alerta en la tabla health_events."""
+        try:
+            with self.db._connect() as conn:
+                conn.execute("""
+                    INSERT INTO health_events
+                        (timestamp, component, device_name, device_type,
+                         alert_type, message, is_recovery)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    alert.timestamp.isoformat(),
+                    alert.device_id,
+                    alert.device_name,
+                    alert.device_type,
+                    alert.alert_type,
+                    alert.message,
+                    1 if alert.alert_type == "recovered" else 0,
+                ))
                 conn.commit()
         except Exception as e:
             logger.error(f"Error guardando alerta en DB: {e}")

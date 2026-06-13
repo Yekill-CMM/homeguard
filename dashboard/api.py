@@ -950,3 +950,25 @@ def add_health_routes(app: FastAPI, core):
             "offline": offline,
             "warning": warning,
         }
+
+    @app.get("/api/health/log")
+    async def health_log(
+        alert_type: Optional[str] = None,
+        limit: int = Query(default=100, le=500),
+        offset: int = 0,
+    ):
+        """Log persistente de eventos de salud desde la DB."""
+        try:
+            with _db._connect() as conn:
+                q = "SELECT * FROM health_events"
+                params = []
+                if alert_type and alert_type != "all":
+                    q += " WHERE alert_type = ?"
+                    params.append(alert_type)
+                q += " ORDER BY id DESC LIMIT ? OFFSET ?"
+                params += [limit, offset]
+                rows = conn.execute(q, params).fetchall()
+                return [dict(r) for r in rows]
+        except Exception as e:
+            logger.warning(f"health_log error: {e}")
+            return []

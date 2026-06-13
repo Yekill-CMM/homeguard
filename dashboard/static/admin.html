@@ -208,6 +208,31 @@ header {
   max-width: 960px;
 }
 
+.hf-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 6px;
+  padding: 5px 12px;
+  font-family: var(--ui, sans-serif);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all .15s;
+}
+.hf-btn:hover { border-color: var(--accent); color: var(--accent); }
+.hf-btn.active { background: var(--accent); color: #080c10; border-color: var(--accent); font-weight: 700; }
+.log-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.log-row:last-child { border-bottom: none; }
+.log-ts { color: var(--muted); font-size: 11px; white-space: nowrap; min-width: 130px; }
+.log-msg { color: var(--text); flex: 1; }
+.log-wrap { background: var(--s1, #0d1318); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
 .section { display: none; }
 .section.active { display: block; }
 
@@ -886,13 +911,27 @@ header {
         </div>
       </div>
 
+      <!-- Estado sistema: disco e internet -->
+      <div class="section-title" style="margin-bottom:12px">SISTEMA</div>
+      <div class="items-grid" id="health-system-list"></div>
+
       <!-- Lista de dispositivos con estado -->
-      <div class="section-title" style="margin-bottom:12px">DISPOSITIVOS MONITOREADOS</div>
+      <div class="section-title" style="margin:20px 0 12px">DISPOSITIVOS MONITOREADOS</div>
       <div class="items-grid" id="health-list"></div>
 
-      <!-- Alertas recientes -->
-      <div class="section-title" style="margin:20px 0 12px">ALERTAS RECIENTES</div>
-      <div class="items-grid" id="health-alerts-list"></div>
+      <!-- Log de eventos con filtros -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin:20px 0 12px">
+        <div class="section-title" style="margin:0">LOG DE EVENTOS</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap" id="health-log-filters">
+          <button class="hf-btn active" onclick="setHealthFilter('all',this)">Todos</button>
+          <button class="hf-btn" onclick="setHealthFilter('offline',this)">🔴 Offline</button>
+          <button class="hf-btn" onclick="setHealthFilter('disk',this)">💾 Disco</button>
+          <button class="hf-btn" onclick="setHealthFilter('internet',this)">🌐 Internet</button>
+          <button class="hf-btn" onclick="setHealthFilter('high_latency',this)">🟡 Latencia</button>
+          <button class="hf-btn" onclick="setHealthFilter('recovered',this)">🟢 Recuperados</button>
+        </div>
+      </div>
+      <div id="health-log-list"></div>
     </div>
 
   </div>
@@ -1525,31 +1564,76 @@ function addSensorFromScan(device) {
 }
 
 // ─── Salud del sistema ─────────────────────────────────────
+let _healthFilter = 'all';
+let _healthAutoRefresh = null;
+
+function setHealthFilter(type, btn) {
+  _healthFilter = type;
+  document.querySelectorAll('.hf-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  loadHealthLog();
+}
+
+function toggleHealthAutoRefresh() {
+  if (_healthAutoRefresh) {
+    clearInterval(_healthAutoRefresh);
+    _healthAutoRefresh = null;
+  } else {
+    _healthAutoRefresh = setInterval(loadHealth, 30000);
+  }
+}
+
 async function loadHealth() {
   try {
-    const [summary, devices, alerts] = await Promise.all([
+    const [summary, devices] = await Promise.all([
       fetch(`${API}/api/health/summary`).then(r=>r.json()),
       fetch(`${API}/api/health/devices`).then(r=>r.json()),
-      fetch(`${API}/api/health/alerts?limit=20`).then(r=>r.json()),
     ]);
 
     // Métricas
-    document.getElementById('hm-total').textContent   = summary.total   ?? 0;
-    document.getElementById('hm-online').textContent  = summary.online  ?? 0;
-    document.getElementById('hm-offline').textContent = summary.offline ?? 0;
-    document.getElementById('hm-warning').textContent = summary.warning ?? 0;
+    document.getElementById('hm-total').textContent    = summary.total   ?? 0;
+    document.getElementById('hm-online').textContent   = summary.online  ?? 0;
+    document.getElementById('hm-offline').textContent  = summary.offline ?? 0;
+    document.getElementById('hm-warning').textContent  = summary.warning ?? 0;
     document.getElementById('cnt-offline').textContent = summary.offline ?? 0;
 
-    // Dispositivos
-    const TYPE_ICONS = { camera:'📹', sensor:'📡', recorder:'🎬', router:'🌐', other:'🔌' };
+    // Tarjetas de sistema (disco + internet)
+    const sysList = document.getElementById('health-system-list');
+    const sysDevices = devices.filter(d => d.device_type === 'system');
+    const SYSTEM_ICONS = { disk: '💾', internet: '🌐', Disk: '💾', Internet: '🌐' };
+    if (sysDevices.length) {
+      sysList.innerHTML = sysDevices.map(d => {
+        const color = !d.online ? 'var(--red)' : 'var(--green)';
+        const icon  = SYSTEM_ICONS[d.device_id] || SYSTEM_ICONS[d.device_name] || '⚙️';
+        return `
+          <div class="item-card">
+            <div class="item-icon" style="background:rgba(0,0,0,.2)">${icon}</div>
+            <div class="item-info">
+              <div class="item-name">${d.device_name}</div>
+              <div class="item-detail">${d.host || '—'}</div>
+            </div>
+            <div class="item-actions">
+              <span class="badge" style="color:${color};border-color:${color}20;background:${color}15">
+                ${d.online ? '● OK' : '○ ALERTA'}
+              </span>
+            </div>
+          </div>`;
+      }).join('');
+    } else {
+      sysList.innerHTML = '';
+    }
+
+    // Dispositivos (cámaras, infra)
+    const TYPE_ICONS = { camera:'📹', sensor:'📡', recorder:'🎬', router:'🌐', server:'🖥️', nvr:'📼', other:'🔌' };
+    const hwDevices = devices.filter(d => d.device_type !== 'system');
     const list = document.getElementById('health-list');
-    if (!devices.length) {
+    if (!hwDevices.length) {
       list.innerHTML = emptyState('❤️', 'Sin dispositivos monitoreados', 'Inicia el sistema para comenzar el monitoreo');
     } else {
-      list.innerHTML = devices.map(d => {
-        const icon = TYPE_ICONS[d.device_type] || '🔌';
+      list.innerHTML = hwDevices.map(d => {
+        const icon        = TYPE_ICONS[d.device_type] || '🔌';
         const statusColor = !d.online ? 'var(--red)' : d.latency_ms > 300 ? 'var(--amber)' : 'var(--green)';
-        const statusText  = !d.online ? 'OFFLINE' : d.latency_ms > 300 ? `${d.latency_ms}ms` : `${d.latency_ms}ms`;
+        const statusText  = !d.online ? 'OFFLINE' : `${d.latency_ms}ms`;
         const lastSeen    = d.last_seen ? new Date(d.last_seen).toLocaleTimeString('es-CL') : '—';
         return `
           <div class="item-card">
@@ -1568,24 +1652,56 @@ async function loadHealth() {
       }).join('');
     }
 
-    // Alertas
-    const alertList = document.getElementById('health-alerts-list');
-    const ALERT_ICONS = { offline:'🔴', recovered:'🟢', high_latency:'🟡' };
-    if (!alerts.length) {
-      alertList.innerHTML = `<div class="empty-state"><div class="empty-icon">✅</div><div class="empty-title">Sin alertas recientes</div><div class="empty-desc">Todos los dispositivos operando normalmente</div></div>`;
-    } else {
-      alertList.innerHTML = alerts.map(a => `
-        <div class="item-card" style="border-left:3px solid ${a.alert_type==='offline'?'var(--red)':a.alert_type==='recovered'?'var(--green)':'var(--amber)'}">
-          <div class="item-icon" style="font-size:22px;background:none">${ALERT_ICONS[a.alert_type]||'⚠️'}</div>
-          <div class="item-info">
-            <div class="item-name">${a.message}</div>
-            <div class="item-detail">${new Date(a.timestamp).toLocaleString('es-CL')}</div>
-          </div>
-        </div>`).join('');
-    }
+    // Cargar log
+    await loadHealthLog();
 
   } catch(e) {
     console.warn('Error cargando salud:', e);
+  }
+}
+
+async function loadHealthLog() {
+  const logList = document.getElementById('health-log-list');
+  if (!logList) return;
+  try {
+    const url = `${API}/api/health/log?limit=100` + (_healthFilter !== 'all' ? `&alert_type=${_healthFilter}` : '');
+    const logs = await fetch(url).then(r => r.json());
+
+    const ALERT_ICONS = {
+      offline:      '🔴',
+      recovered:    '🟢',
+      high_latency: '🟡',
+      disk:         '💾',
+      internet:     '🌐',
+    };
+    const ALERT_COLORS = {
+      offline:      'var(--red)',
+      recovered:    'var(--green)',
+      high_latency: 'var(--amber)',
+      disk:         'var(--amber)',
+      internet:     'var(--red)',
+    };
+
+    if (!logs.length) {
+      logList.innerHTML = `<div class="empty-state"><div class="empty-icon">✅</div><div class="empty-title">Sin eventos registrados</div><div class="empty-desc">Los eventos de salud aparecerán aquí</div></div>`;
+      return;
+    }
+
+    logList.innerHTML = `<div class="log-wrap">${logs.map(a => {
+      const icon  = ALERT_ICONS[a.alert_type]  || '⚠️';
+      const color = ALERT_COLORS[a.alert_type] || 'var(--muted)';
+      const ts    = new Date(a.timestamp).toLocaleString('es-CL', {
+        day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit'
+      });
+      return `<div class="log-row">
+        <span style="font-size:16px">${icon}</span>
+        <span class="log-ts">${ts}</span>
+        <span class="log-msg" style="color:${color}">${a.device_name}</span>
+        <span class="log-msg">${a.message || '—'}</span>
+      </div>`;
+    }).join('')}</div>`;
+  } catch(e) {
+    console.warn('Error cargando log:', e);
   }
 }
 
