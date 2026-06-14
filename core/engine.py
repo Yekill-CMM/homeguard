@@ -76,8 +76,13 @@ class HomeGuardCore:
             "events_received": 0,
             "events_analyzed": 0,
             "events_skipped_ai": 0,
+            "events_blocked_limiter": 0,
             "alerts_triggered": 0,
         }
+
+        # Inicializar limitador de uso de Claude Vision
+        from core.claude_limiter import ClaudeLimiter
+        self.limiter = ClaudeLimiter(db_path=storage_config.db_path)
 
     async def handle_event(self, event: SecurityEvent):
         presence = getattr(self, "presence", None)
@@ -137,8 +142,17 @@ class HomeGuardCore:
 
         # ── Análisis Claude (si necesario) ────────────────────────────
         if event.needs_ai_analysis and event.snapshot:
-            await self._analyze_with_claude(event)
-            self._stats["events_analyzed"] += 1
+            allowed, block_reason = self.limiter.can_call(str(event.camera_id))
+            if allowed:
+                await self._analyze_with_claude(event)
+                self.limiter.record_call(str(event.camera_id))
+                self._stats["events_analyzed"] += 1
+            else:
+                self._stats["events_blocked_limiter"] += 1
+                self._stats["events_skipped_ai"] += 1
+                logger.warning(
+                    f"[Limiter] {event.camera_name} — bloqueado: {block_reason}"
+                )
         elif not event.needs_ai_analysis:
             pass  # Ya clasificado por YOLO
         else:

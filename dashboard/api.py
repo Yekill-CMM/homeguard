@@ -972,3 +972,24 @@ def add_health_routes(app: FastAPI, core):
         except Exception as e:
             logger.warning(f"health_log error: {e}")
             return []
+
+    @app.get("/api/claude/stats")
+    async def claude_stats():
+        """Estadísticas de uso y gasto de Claude Vision."""
+        limiter = getattr(core, "limiter", None)
+        if not limiter:
+            return {"error": "Limiter no disponible"}
+        return limiter.stats()
+
+    @app.get("/api/claude/limits")
+    async def claude_limits():
+        """Configuración actual de los límites de Claude Vision."""
+        limiter = getattr(core, "limiter", None)
+        if not limiter:
+            return {}
+        return {
+            "daily_limit":          limiter.daily_limit,
+            "monthly_budget_usd":   limiter.monthly_budget_usd,
+            "camera_cooldown_s":    limiter.camera_cooldown_s,
+            "cost_per_call_usd":    limiter.cost_per_call_usd,
+        }
