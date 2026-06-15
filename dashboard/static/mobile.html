@@ -1033,6 +1033,7 @@ async function loadSettings() {
     document.getElementById('set-status').textContent = '🔴 Sin conexión';
   }
   document.getElementById('qr-url').textContent = `${API}/mobile`;
+  await loadClaudeStats();
 }
 
 // ─── PWA Install ──────────────────────────────────────────
