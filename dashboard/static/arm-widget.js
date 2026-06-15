@@ -7,7 +7,7 @@
   ];
   var box = document.createElement("div");
   box.id = "hg-arm-widget";
-  box.style.cssText = "position:fixed;bottom:16px;right:16px;z-index:9999;" +
+  box.style.cssText = "position:fixed;bottom:calc(60px + env(safe-area-inset-bottom, 0px) + 8px);right:12px;z-index:9999;" +
     "background:#1f2937;color:#f9fafb;border-radius:12px;padding:10px 12px;" +
     "font-family:system-ui,sans-serif;font-size:13px;box-shadow:0 4px 12px rgba(0,0,0,.4);" +
     "display:flex;flex-direction:column;gap:8px;min-width:180px";

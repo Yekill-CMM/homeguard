@@ -844,6 +844,8 @@ setInterval(tick, 1000); tick();
 
 // ─── Navegación ───────────────────────────────────────────
 function showTab(name, btn) {
+  var widget = document.getElementById('hg-arm-widget');
+  if (widget) widget.style.display = name === 'settings' ? 'none' : '';
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.getElementById(`page-${name}`).classList.add('active');
