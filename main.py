@@ -167,7 +167,6 @@ async def main():
     add_audio_routes(app, core.db, core)
 
     # ── HTTPS si hay certificado Tailscale, HTTP si no ────────────────────
-    import os
     ssl_cert = os.path.expanduser("~/homeguard/certs/homeguard.crt")
     ssl_key  = os.path.expanduser("~/homeguard/certs/homeguard.key")
 
