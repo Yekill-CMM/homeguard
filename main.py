@@ -166,24 +166,10 @@ async def main():
     add_infra_routes(app, core.db, core)
     add_audio_routes(app, core.db, core)
 
-    # ── HTTPS si hay certificado Tailscale, HTTP si no ────────────────────
-    ssl_cert = os.path.expanduser("~/homeguard/certs/homeguard.crt")
-    ssl_key  = os.path.expanduser("~/homeguard/certs/homeguard.key")
-
-    if os.path.exists(ssl_cert) and os.path.exists(ssl_key):
-        uv_config = uvicorn.Config(
-            app, host="0.0.0.0", port=config.api_port, log_level="warning",
-            ssl_certfile=ssl_cert, ssl_keyfile=ssl_key,
-        )
-        logger.info(f"HTTPS habilitado — https://5228.tailfc504d.ts.net:{config.api_port}")
-    else:
-        uv_config = uvicorn.Config(
-            app, host="0.0.0.0", port=config.api_port, log_level="warning",
-        )
-        logger.warning("Sin certificado SSL — ejecutando en HTTP (push no disponible en iOS)")
-
     dashboard_task = asyncio.create_task(
-        uvicorn.Server(uv_config).serve()
+        uvicorn.Server(uvicorn.Config(
+            app, host="0.0.0.0", port=config.api_port, log_level="warning",
+        )).serve()
     )
     logger.info(f"Dashboard disponible en http://localhost:{config.api_port}")
 
