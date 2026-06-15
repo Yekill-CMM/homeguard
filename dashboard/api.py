@@ -993,3 +993,59 @@ def add_health_routes(app: FastAPI, core):
             "camera_cooldown_s":    limiter.camera_cooldown_s,
             "cost_per_call_usd":    limiter.cost_per_call_usd,
         }
+
+    @app.get("/api/claude/config")
+    async def claude_config_get():
+        """Estado de Claude Vision: habilitado, api key, stats de uso."""
+        import os
+        limiter = getattr(core, "limiter", None)
+
+        # Estado habilitado desde engine
+        enabled = getattr(core, "_claude_enabled", True)
+
+        # API key enmascarada
+        env_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        configured = len(env_key) > 20 and not env_key.startswith("sk-ant-demo")
+        masked = f"sk-ant-...{env_key[-6:]}" if configured else "No configurada"
+
+        return {
+            "enabled":            enabled,
+            "api_key_configured": configured,
+            "api_key_masked":     masked,
+            "stats":              limiter.stats() if limiter else {},
+        }
+
+    @app.post("/api/claude/config")
+    async def claude_config_set(body: dict):
+        """Actualiza habilitación de Claude Vision y/o la API key."""
+        from datetime import datetime
+        from pathlib import Path as P
+        results = {}
+
+        # Toggle enabled/disabled (sin reiniciar)
+        if "enabled" in body:
+            enabled = bool(body["enabled"])
+            if hasattr(core, "_claude_enabled"):
+                core._claude_enabled = enabled
+            results["enabled"] = enabled
+
+        # Actualizar API key en .env
+        if "api_key" in body and body["api_key"]:
+            api_key = body["api_key"].strip()
+            if not api_key.startswith("sk-ant-"):
+                return {"ok": False, "message": "API key inválida — debe comenzar con sk-ant-"}
+            env_path = P.home() / "homeguard" / ".env"
+            if env_path.exists():
+                import re as _re
+                env_text = env_path.read_text()
+                if "ANTHROPIC_API_KEY=" in env_text:
+                    env_text = _re.sub(r"ANTHROPIC_API_KEY=.*", f"ANTHROPIC_API_KEY={api_key}", env_text)
+                else:
+                    env_text += f"\nANTHROPIC_API_KEY={api_key}\n"
+                env_path.write_text(env_text)
+                results["api_key"] = "actualizada"
+                results["message"] = "API key guardada en .env — reinicia el servicio para aplicar"
+            else:
+                return {"ok": False, "message": ".env no encontrado"}
+
+        return {"ok": True, **results}

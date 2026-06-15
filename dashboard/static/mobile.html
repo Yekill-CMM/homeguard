@@ -699,7 +699,58 @@ html, body {
         </div>
       </div>
 
-      <div class="section-title">sistema</div>
+      <div class="section-title" style="margin-top:16px">claude vision</div>
+      <div class="settings-section">
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label">Análisis IA habilitado</div>
+            <div class="setting-desc">Clasifica eventos con Claude Vision</div>
+          </div>
+          <button class="toggle on" id="toggle-claude" onclick="toggleClaudeVision(this)"></button>
+        </div>
+        <div class="setting-row" style="flex-direction:column;align-items:flex-start;gap:10px">
+          <div class="setting-info" style="width:100%">
+            <div class="setting-label">API Key Anthropic</div>
+            <div class="setting-desc" id="api-key-status">Cargando...</div>
+          </div>
+          <div style="display:flex;gap:8px;width:100%">
+            <input type="password" id="api-key-input"
+                   placeholder="sk-ant-api03-..."
+                   style="flex:1;background:var(--bg);border:1px solid var(--border);
+                          border-radius:8px;padding:9px 12px;color:var(--text);
+                          font-family:var(--mono);font-size:12px;outline:none">
+            <button onclick="saveApiKey()"
+                    style="background:var(--accent);color:#080c10;border:none;
+                           border-radius:8px;padding:9px 16px;font-weight:700;
+                           font-family:var(--ui);font-size:13px;cursor:pointer;
+                           white-space:nowrap">
+              Guardar
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-title" style="margin-top:12px">uso claude vision</div>
+      <div class="settings-section">
+        <div class="setting-row">
+          <div class="setting-info"><div class="setting-label">Hoy</div></div>
+          <div class="setting-value" id="cv-today">—</div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-info"><div class="setting-label">Este mes</div></div>
+          <div class="setting-value" id="cv-month">—</div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-info"><div class="setting-label">Presupuesto</div></div>
+          <div class="setting-value" id="cv-budget">—</div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-info"><div class="setting-label">Disponible mes</div></div>
+          <div class="setting-value" id="cv-remaining" style="color:var(--green)">—</div>
+        </div>
+      </div>
+
+      <div class="section-title" style="margin-top:16px">sistema</div>
       <div class="settings-section">
         <div class="setting-row">
           <div class="setting-info">
@@ -1058,6 +1109,78 @@ async function toggleNotifications(btn) {
   } catch(e) {
     console.error('Error suscribiendo push:', e);
     alert('Error activando notificaciones: ' + e.message);
+  }
+}
+
+// ─── Claude Vision ────────────────────────────────────────
+async function toggleClaudeVision(btn) {
+  const enabled = !btn.classList.contains('on');
+  btn.classList.toggle('on');
+  try {
+    await fetch(`${API}/api/claude/config`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({enabled}),
+    });
+  } catch(e) {
+    console.warn('Error toggling Claude:', e);
+    btn.classList.toggle('on'); // revertir en caso de error
+  }
+}
+
+async function saveApiKey() {
+  const key = document.getElementById('api-key-input').value.trim();
+  if (!key) { alert('Ingresa una API key'); return; }
+  if (!key.startsWith('sk-ant-')) {
+    alert('API key inválida\nDebe comenzar con sk-ant-');
+    return;
+  }
+  try {
+    const res  = await fetch(`${API}/api/claude/config`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({api_key: key}),
+    });
+    const data = await res.json();
+    alert(data.message || (data.ok ? '✅ Guardado' : '❌ Error'));
+    document.getElementById('api-key-input').value = '';
+    await loadClaudeStats();
+  } catch(e) {
+    alert('Error guardando API key: ' + e.message);
+  }
+}
+
+async function loadClaudeStats() {
+  try {
+    const data = await fetch(`${API}/api/claude/config`).then(r => r.json());
+
+    // Toggle estado
+    const tc = document.getElementById('toggle-claude');
+    if (tc) {
+      data.enabled ? tc.classList.add('on') : tc.classList.remove('on');
+    }
+
+    // API key status
+    const ks = document.getElementById('api-key-status');
+    if (ks) {
+      ks.textContent = data.api_key_configured
+        ? `✅ ${data.api_key_masked}`
+        : '❌ No configurada';
+      ks.style.color = data.api_key_configured ? 'var(--green)' : 'var(--red)';
+    }
+
+    // Stats de uso
+    const s  = data.stats || {};
+    const td = s.today  || {};
+    const mn = s.month  || {};
+
+    const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+    set('cv-today',     `${td.calls ?? 0} llamadas · USD ${(td.cost_usd ?? 0).toFixed(3)}`);
+    set('cv-month',     `USD ${(mn.cost_usd ?? 0).toFixed(3)} (${mn.pct ?? 0}%)`);
+    set('cv-budget',    `USD ${mn.budget_usd ?? 15} / mes`);
+    set('cv-remaining', `USD ${(mn.remaining ?? 15).toFixed(3)}`);
+  } catch(e) {
+    console.warn('Error cargando stats Claude:', e);
   }
 }
 
