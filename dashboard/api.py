@@ -994,6 +994,62 @@ def add_health_routes(app: FastAPI, core):
             "cost_per_call_usd":    limiter.cost_per_call_usd,
         }
 
+    @app.post("/api/claude/limits")
+    async def claude_limits_set(body: dict):
+        """Actualiza límites de Claude Vision en memoria y en .env."""
+        import re as _re
+        from pathlib import Path as P
+
+        limiter = getattr(core, "limiter", None)
+        updated = {}
+
+        # Validar y aplicar en memoria
+        try:
+            if "daily_limit" in body:
+                val = max(1, int(body["daily_limit"]))
+                if limiter: limiter.daily_limit = val
+                updated["CLAUDE_DAILY_LIMIT"] = str(val)
+
+            if "monthly_budget_usd" in body:
+                val = max(0.1, float(body["monthly_budget_usd"]))
+                if limiter: limiter.monthly_budget_usd = val
+                updated["CLAUDE_MONTHLY_BUDGET"] = f"{val:.2f}"
+
+            if "camera_cooldown_s" in body:
+                val = max(5, int(body["camera_cooldown_s"]))
+                if limiter: limiter.camera_cooldown_s = val
+                updated["CLAUDE_COOLDOWN_S"] = str(val)
+
+            if "cost_per_call_usd" in body:
+                val = max(0.001, float(body["cost_per_call_usd"]))
+                if limiter: limiter.cost_per_call_usd = val
+                updated["CLAUDE_COST_PER_CALL"] = f"{val:.4f}"
+
+        except (ValueError, TypeError) as e:
+            return {"ok": False, "message": f"Valor inválido: {e}"}
+
+        # Persistir en .env
+        env_path = P.home() / "homeguard" / ".env"
+        if env_path.exists() and updated:
+            env_text = env_path.read_text()
+            for key, val in updated.items():
+                if key in env_text:
+                    env_text = _re.sub(rf"^{key}=.*", f"{key}={val}", env_text, flags=_re.MULTILINE)
+                else:
+                    env_text += f"\n{key}={val}\n"
+            env_path.write_text(env_text)
+
+        return {
+            "ok":     True,
+            "saved":  list(updated.keys()),
+            "limits": {
+                "daily_limit":        limiter.daily_limit        if limiter else None,
+                "monthly_budget_usd": limiter.monthly_budget_usd if limiter else None,
+                "camera_cooldown_s":  limiter.camera_cooldown_s  if limiter else None,
+                "cost_per_call_usd":  limiter.cost_per_call_usd  if limiter else None,
+            }
+        }
+
     @app.get("/api/claude/config")
     async def claude_config_get():
         """Estado de Claude Vision: habilitado, api key, stats de uso."""

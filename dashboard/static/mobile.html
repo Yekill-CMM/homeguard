@@ -751,6 +751,38 @@ html, body {
         </div>
       </div>
 
+      <div class="section-title" style="margin-top:16px">límites claude vision</div>
+      <div class="settings-section">
+        <div class="setting-row" style="flex-direction:column;align-items:flex-start;gap:6px">
+          <div class="setting-label">Llamadas máximas por día</div>
+          <input type="number" id="lim-daily" min="1" max="10000"
+                 placeholder="200" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:var(--mono);font-size:13px;outline:none;width:100%;box-sizing:border-box">
+        </div>
+        <div class="setting-row" style="flex-direction:column;align-items:flex-start;gap:6px">
+          <div class="setting-label">Presupuesto mensual (USD)</div>
+          <input type="number" id="lim-budget" min="1" step="0.5"
+                 placeholder="15.0" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:var(--mono);font-size:13px;outline:none;width:100%;box-sizing:border-box">
+        </div>
+        <div class="setting-row" style="flex-direction:column;align-items:flex-start;gap:6px">
+          <div class="setting-label">Cooldown por cámara (seg)</div>
+          <input type="number" id="lim-cooldown" min="5" max="300"
+                 placeholder="30" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:var(--mono);font-size:13px;outline:none;width:100%;box-sizing:border-box">
+        </div>
+        <div class="setting-row" style="flex-direction:column;align-items:flex-start;gap:6px">
+          <div class="setting-label">Costo estimado por llamada (USD)</div>
+          <input type="number" id="lim-cost" min="0.001" step="0.001"
+                 placeholder="0.015" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:var(--mono);font-size:13px;outline:none;width:100%;box-sizing:border-box">
+        </div>
+        <div class="setting-row" style="justify-content:flex-end">
+          <button onclick="saveLimits()"
+                  style="background:var(--accent);color:#080c10;border:none;
+                         border-radius:8px;padding:10px 20px;font-weight:700;
+                         font-family:var(--ui);font-size:13px;cursor:pointer">
+            Guardar límites
+          </button>
+        </div>
+      </div>
+
       <div class="section-title" style="margin-top:16px">sistema</div>
       <div class="settings-section">
         <div class="setting-row">
@@ -1154,6 +1186,35 @@ async function saveApiKey() {
   }
 }
 
+async function saveLimits() {
+  const daily    = document.getElementById('lim-daily').value;
+  const budget   = document.getElementById('lim-budget').value;
+  const cooldown = document.getElementById('lim-cooldown').value;
+  const cost     = document.getElementById('lim-cost').value;
+
+  if (!daily || !budget || !cooldown || !cost) {
+    alert('Completa todos los campos');
+    return;
+  }
+  try {
+    const res  = await fetch(`${API}/api/claude/limits`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        daily_limit:        parseInt(daily),
+        monthly_budget_usd: parseFloat(budget),
+        camera_cooldown_s:  parseInt(cooldown),
+        cost_per_call_usd:  parseFloat(cost),
+      }),
+    });
+    const data = await res.json();
+    alert(data.ok ? '✅ Límites guardados' : '❌ Error: ' + (data.message || ''));
+    if (data.ok) await loadClaudeStats();
+  } catch(e) {
+    alert('Error: ' + e.message);
+  }
+}
+
 async function loadClaudeStats() {
   try {
     const data = await fetch(`${API}/api/claude/config`).then(r => r.json());
@@ -1179,6 +1240,14 @@ async function loadClaudeStats() {
     const mn = s.month  || {};
 
     const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+
+    // Poblar inputs editables con valores actuales
+    const cfg = s.config || {};
+    const setInp = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined) el.value = val; };
+    setInp('lim-daily',    cfg.daily_limit);
+    setInp('lim-budget',   cfg.monthly_budget_usd);
+    setInp('lim-cooldown', cfg.camera_cooldown_s);
+    setInp('lim-cost',     cfg.cost_per_call_usd);
     set('cv-today',     `${td.calls ?? 0} llamadas · USD ${(td.cost_usd ?? 0).toFixed(3)}`);
     set('cv-month',     `USD ${(mn.cost_usd ?? 0).toFixed(3)} (${mn.pct ?? 0}%)`);
     set('cv-budget',    `USD ${mn.budget_usd ?? 15} / mes`);
