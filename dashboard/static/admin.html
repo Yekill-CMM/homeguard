@@ -1807,6 +1807,24 @@ async function loadClaudeAdmin() {
       setInp('cl-inp-cost',     cfg.cost_per_call_usd);
     }
 
+    // Poblar inputs editables con valores actuales
+    if (cfg) {
+      const setInp = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined) el.value = val; };
+      setInp('cl-inp-daily',    cfg.daily_limit);
+      setInp('cl-inp-budget',   cfg.monthly_budget_usd);
+      setInp('cl-inp-cooldown', cfg.camera_cooldown_s);
+      setInp('cl-inp-cost',     cfg.cost_per_call_usd);
+    }
+
+    // Poblar inputs editables con valores actuales
+    if (cfg) {
+      const setInp = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined) el.value = val; };
+      setInp('cl-inp-daily',    cfg.daily_limit);
+      setInp('cl-inp-budget',   cfg.monthly_budget_usd);
+      setInp('cl-inp-cooldown', cfg.camera_cooldown_s);
+      setInp('cl-inp-cost',     cfg.cost_per_call_usd);
+    }
+
     // Historial
     const hl = document.getElementById('cl-history-list');
     const hist = s.history || [];
@@ -1833,6 +1851,74 @@ async function loadClaudeAdmin() {
 
   } catch(e) {
     console.warn('Error cargando Claude admin:', e);
+  }
+}
+
+async function saveLimitsAdmin() {
+  const daily    = document.getElementById('cl-inp-daily').value;
+  const budget   = document.getElementById('cl-inp-budget').value;
+  const cooldown = document.getElementById('cl-inp-cooldown').value;
+  const cost     = document.getElementById('cl-inp-cost').value;
+
+  if (!daily || !budget || !cooldown || !cost) {
+    alert('Completa todos los campos antes de guardar');
+    return;
+  }
+
+  try {
+    const res  = await fetch(`${API}/api/claude/limits`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        daily_limit:        parseInt(daily),
+        monthly_budget_usd: parseFloat(budget),
+        camera_cooldown_s:  parseInt(cooldown),
+        cost_per_call_usd:  parseFloat(cost),
+      }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      showToast('✅ Límites guardados y aplicados');
+      await loadClaudeAdmin();
+    } else {
+      alert('Error: ' + (data.message || 'No se pudo guardar'));
+    }
+  } catch(e) {
+    alert('Error al guardar: ' + e.message);
+  }
+}
+
+async function saveLimitsAdmin() {
+  const daily    = document.getElementById('cl-inp-daily').value;
+  const budget   = document.getElementById('cl-inp-budget').value;
+  const cooldown = document.getElementById('cl-inp-cooldown').value;
+  const cost     = document.getElementById('cl-inp-cost').value;
+
+  if (!daily || !budget || !cooldown || !cost) {
+    alert('Completa todos los campos antes de guardar');
+    return;
+  }
+
+  try {
+    const res  = await fetch(`${API}/api/claude/limits`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        daily_limit:        parseInt(daily),
+        monthly_budget_usd: parseFloat(budget),
+        camera_cooldown_s:  parseInt(cooldown),
+        cost_per_call_usd:  parseFloat(cost),
+      }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      showToast('✅ Límites guardados y aplicados');
+      await loadClaudeAdmin();
+    } else {
+      alert('Error: ' + (data.message || 'No se pudo guardar'));
+    }
+  } catch(e) {
+    alert('Error al guardar: ' + e.message);
   }
 }
 
@@ -2662,6 +2748,38 @@ loadOverview();
       <!-- Límites configurados -->
       <div class="section-title" style="margin-bottom:12px">LÍMITES ACTIVOS</div>
       <div class="items-grid" style="margin-bottom:20px" id="cl-limits-list"></div>
+
+      <!-- Formulario editable de límites -->
+      <div class="section-title" style="margin:20px 0 12px">MODIFICAR LÍMITES</div>
+      <div class="item-card" style="flex-direction:column;gap:16px;align-items:stretch">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div>
+            <div class="form-label" style="margin-bottom:6px">Llamadas máx. / día</div>
+            <input class="form-input" type="number" id="cl-inp-daily"
+                   min="1" max="10000" placeholder="200">
+          </div>
+          <div>
+            <div class="form-label" style="margin-bottom:6px">Presupuesto mensual (USD)</div>
+            <input class="form-input" type="number" id="cl-inp-budget"
+                   min="1" max="500" step="0.5" placeholder="15.0">
+          </div>
+          <div>
+            <div class="form-label" style="margin-bottom:6px">Cooldown por cámara (seg)</div>
+            <input class="form-input" type="number" id="cl-inp-cooldown"
+                   min="5" max="300" placeholder="30">
+          </div>
+          <div>
+            <div class="form-label" style="margin-bottom:6px">Costo est. por llamada (USD)</div>
+            <input class="form-input" type="number" id="cl-inp-cost"
+                   min="0.001" max="1" step="0.001" placeholder="0.015">
+          </div>
+        </div>
+        <div style="display:flex;justify-content:flex-end">
+          <button class="btn-primary" onclick="saveLimitsAdmin()">
+            Guardar límites
+          </button>
+        </div>
+      </div>
 
       <!-- Historial 7 días -->
       <div class="section-title" style="margin-bottom:12px">HISTORIAL — ÚLTIMOS 7 DÍAS</div>
