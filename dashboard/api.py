@@ -997,16 +997,27 @@ def add_health_routes(app: FastAPI, core):
     @app.get("/api/claude/config")
     async def claude_config_get():
         """Estado de Claude Vision: habilitado, api key, stats de uso."""
-        import os
         limiter = getattr(core, "limiter", None)
 
         # Estado habilitado desde engine
         enabled = getattr(core, "_claude_enabled", True)
 
-        # API key enmascarada
-        env_key = os.environ.get("ANTHROPIC_API_KEY", "")
-        configured = len(env_key) > 20 and not env_key.startswith("sk-ant-demo")
-        masked = f"sk-ant-...{env_key[-6:]}" if configured else "No configurada"
+        # API key desde claude_config del engine (más fiable que os.environ)
+        api_key = ""
+        claude_cfg = getattr(core, "claude_config", None)
+        if claude_cfg:
+            api_key = getattr(claude_cfg, "api_key", "") or ""
+        if not api_key:
+            import os
+            api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+
+        configured = (
+            len(api_key) > 20
+            and not api_key.startswith("sk-ant-demo")
+            and "PLACEHOLDER" not in api_key.upper()
+            and "TU_API" not in api_key.upper()
+        )
+        masked = f"sk-ant-...{api_key[-6:]}" if configured else "No configurada"
 
         return {
             "enabled":            enabled,
