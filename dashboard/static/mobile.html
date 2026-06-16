@@ -433,8 +433,10 @@ html, body {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 10px;
-  overflow: hidden;
+  overflow: visible;
+  flex-shrink: 0;
 }
+.settings-section .setting-row { flex-shrink: 0; }
 
 .setting-row {
   display: flex;
