@@ -81,7 +81,17 @@ class HomeGuardCore:
         }
 
         # Flag de habilitación de Claude Vision (togglable desde la UI)
-        self._claude_enabled = True
+        # Claude solo se habilita si hay API key válida
+        _key = (claude_config.api_key or "")
+        self._key_valid = (
+            len(_key) > 20
+            and not _key.startswith("sk-ant-demo")
+            and "PLACEHOLDER" not in _key.upper()
+            and "TU_API" not in _key.upper()
+        )
+        self._claude_enabled = self._key_valid
+        if not self._key_valid:
+            logger.warning("[Claude] API key no válida — análisis IA deshabilitado")
 
         # Inicializar limitador de uso de Claude Vision
         from core.claude_limiter import ClaudeLimiter

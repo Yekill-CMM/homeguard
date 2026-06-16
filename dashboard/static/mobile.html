@@ -1154,6 +1154,11 @@ async function toggleNotifications(btn) {
 
 // ─── Claude Vision ────────────────────────────────────────
 async function toggleClaudeVision(btn) {
+  // No permitir activar si no hay API key válida
+  if (btn.dataset.keyConfigured !== '1' && !btn.classList.contains('on')) {
+    alert('No se puede habilitar Claude Vision sin una API key válida.\nConfigura la API key primero.');
+    return;
+  }
   const enabled = !btn.classList.contains('on');
   btn.classList.toggle('on');
   try {
@@ -1223,10 +1228,14 @@ async function loadClaudeStats() {
   try {
     const data = await fetch(`${API}/api/claude/config`).then(r => r.json());
 
-    // Toggle estado
+    // Toggle estado — solo ON si hay key válida Y está habilitado
     const tc = document.getElementById('toggle-claude');
     if (tc) {
-      data.enabled ? tc.classList.add('on') : tc.classList.remove('on');
+      const reallyOn = data.enabled && data.api_key_configured;
+      reallyOn ? tc.classList.add('on') : tc.classList.remove('on');
+      // Deshabilitar visualmente si no hay key
+      tc.style.opacity = data.api_key_configured ? '1' : '0.4';
+      tc.dataset.keyConfigured = data.api_key_configured ? '1' : '0';
     }
 
     // API key status

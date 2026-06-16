@@ -1148,6 +1148,12 @@ def add_health_routes(app: FastAPI, core):
         # Toggle enabled/disabled (sin reiniciar)
         if "enabled" in body:
             enabled = bool(body["enabled"])
+            # No permitir habilitar sin key válida
+            if enabled and not getattr(core, "_key_valid", False):
+                return {
+                    "ok": False,
+                    "message": "No se puede habilitar Claude Vision sin una API key válida",
+                }
             if hasattr(core, "_claude_enabled"):
                 core._claude_enabled = enabled
             results["enabled"] = enabled
