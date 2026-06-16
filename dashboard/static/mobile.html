@@ -785,39 +785,6 @@ html, body {
         </div>
       </div>
 
-      <div class="section-title" style="margin-top:16px">límites claude vision</div>
-      <div class="settings-section">
-        <div class="setting-row" style="flex-direction:column;align-items:flex-start;gap:6px">
-          <div class="setting-label">Llamadas máximas por día</div>
-          <input type="number" id="lim-daily" min="1" max="10000"
-                 placeholder="200" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:var(--mono);font-size:13px;outline:none;width:100%;box-sizing:border-box">
-        </div>
-        <div class="setting-row" style="flex-direction:column;align-items:flex-start;gap:6px">
-          <div class="setting-label">Presupuesto mensual (USD)</div>
-          <input type="number" id="lim-budget" min="1" step="0.5"
-                 placeholder="15.0" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:var(--mono);font-size:13px;outline:none;width:100%;box-sizing:border-box">
-        </div>
-        <div class="setting-row" style="flex-direction:column;align-items:flex-start;gap:6px">
-          <div class="setting-label">Cooldown por cámara (seg)</div>
-          <input type="number" id="lim-cooldown" min="5" max="300"
-                 placeholder="30" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:var(--mono);font-size:13px;outline:none;width:100%;box-sizing:border-box">
-        </div>
-        <div class="setting-row" style="flex-direction:column;align-items:flex-start;gap:6px">
-          <div class="setting-label">Costo estimado por llamada (USD)</div>
-          <input type="number" id="lim-cost" min="0.001" step="0.001"
-                 placeholder="0.015" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:var(--mono);font-size:13px;outline:none;width:100%;box-sizing:border-box">
-        </div>
-        <div class="setting-row" style="justify-content:flex-end">
-          <button onclick="saveLimits()"
-                  style="background:var(--accent);color:#080c10;border:none;
-                         border-radius:8px;padding:10px 20px;font-weight:700;
-                         font-family:var(--ui);font-size:13px;cursor:pointer">
-            Guardar límites
-          </button>
-        </div>
-      </div>
-
-      <div class="section-title" style="margin-top:16px">sistema</div>
       <div class="settings-section">
         <div class="setting-row">
           <div class="setting-info">
