@@ -1217,35 +1217,6 @@ async function saveLimits() {
   }
 }
 
-async function saveLimits() {
-  const daily    = document.getElementById('lim-daily').value;
-  const budget   = document.getElementById('lim-budget').value;
-  const cooldown = document.getElementById('lim-cooldown').value;
-  const cost     = document.getElementById('lim-cost').value;
-
-  if (!daily || !budget || !cooldown || !cost) {
-    alert('Completa todos los campos');
-    return;
-  }
-  try {
-    const res  = await fetch(`${API}/api/claude/limits`, {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        daily_limit:        parseInt(daily),
-        monthly_budget_usd: parseFloat(budget),
-        camera_cooldown_s:  parseInt(cooldown),
-        cost_per_call_usd:  parseFloat(cost),
-      }),
-    });
-    const data = await res.json();
-    alert(data.ok ? '✅ Límites guardados' : '❌ Error: ' + (data.message || ''));
-    if (data.ok) await loadClaudeStats();
-  } catch(e) {
-    alert('Error: ' + e.message);
-  }
-}
-
 async function loadClaudeStats() {
   try {
     const data = await fetch(`${API}/api/claude/config`).then(r => r.json());
