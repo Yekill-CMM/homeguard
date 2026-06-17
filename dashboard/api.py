@@ -295,6 +295,43 @@ def add_push_routes(app: FastAPI, notifier, vapid_manager):
         return {"ok": True, "devices": notifier.subscription_count()}
 
 
+
+    class FeedbackBody(BaseModel):
+        feedback: str  # "true_positive" | "false_positive"
+
+    @app.post("/api/events/{event_id}/feedback")
+    async def event_feedback(event_id: str, body: FeedbackBody):
+        if body.feedback not in ("true_positive", "false_positive"):
+            return JSONResponse({"ok": False, "error": "valor inválido"}, status_code=400)
+        try:
+            with _db._connect() as conn:
+                row = conn.execute(
+                    "SELECT camera_name, event_type, timestamp FROM events WHERE id=?",
+                    (event_id,)
+                ).fetchone()
+                if not row:
+                    return JSONResponse({"ok": False, "error": "evento no encontrado"}, status_code=404)
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS event_feedback (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        event_id TEXT UNIQUE NOT NULL,
+                        camera_name TEXT NOT NULL,
+                        event_type TEXT NOT NULL,
+                        feedback TEXT NOT NULL,
+                        event_timestamp TEXT,
+                        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                    )""")
+                conn.execute(
+                    "INSERT OR REPLACE INTO event_feedback "
+                    "(event_id, camera_name, event_type, feedback, event_timestamp) "
+                    "VALUES (?,?,?,?,?)",
+                    (event_id, row[0], row[1], body.feedback, row[2])
+                )
+                conn.commit()
+            return {"ok": True, "feedback": body.feedback}
+        except Exception as e:
+            return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+
 def add_admin_routes(app: FastAPI, db, core=None):
     """Endpoints de administración del sistema."""
     from pydantic import BaseModel

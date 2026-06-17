@@ -72,6 +72,15 @@ class HomeGuardCore:
                 logger.warning("YOLOv8 no disponible — usando solo Claude Vision")
         except Exception as e:
             logger.warning(f"YOLOv8 no disponible: {e} — usando solo Claude Vision")
+        # Sistema de aprendizaje adaptativo
+        self._learning = None
+        try:
+            from learning.context_builder import ContextBuilder
+            self._learning = ContextBuilder(storage_config.db_path)
+            logger.info("Sistema de aprendizaje activo")
+        except Exception as e:
+            logger.warning(f"Aprendizaje no disponible: {e}")
+
         self._stats = {
             "events_received": 0,
             "events_analyzed": 0,
@@ -185,13 +194,23 @@ class HomeGuardCore:
         try:
             image_b64 = base64.standard_b64encode(event.snapshot).decode()
 
+            # Contexto de aprendizaje (baseline + feedback)
+            _lctx, _lscore = ("", 0.5)
+            if self._learning:
+                try:
+                    _lctx, _lscore = self._learning.build(
+                        event.camera_name, event.timestamp, event.event_type.value)
+                except Exception:
+                    pass
+
             prompt = (
                 f"Cámara: {event.camera_name}\n"
                 f"Hora: {event.timestamp.strftime('%H:%M:%S')}\n"
                 f"Fuente: {event.source_type.value}\n"
                 f"Evento previo: {event.event_type.value} "
-                f"(confianza previa: {event.confidence:.0%})\n\n"
-                f"Analiza la imagen y confirma o corrige la clasificación."
+                f"(confianza previa: {event.confidence:.0%})\n"
+                + (f"\n{_lctx}\n" if _lctx else "")
+                + f"\nAnaliza la imagen y confirma o corrige la clasificación."
             )
 
             message = await asyncio.get_event_loop().run_in_executor(

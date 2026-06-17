@@ -231,6 +231,9 @@ html, body {
 }
 
 .event-card.is-alert { border-left: 3px solid var(--red); }
+.ev-feedback { display:flex; gap:8px; margin-top:6px; }
+.ev-feedback button { background:transparent; border:1px solid var(--border,#333); color:var(--muted,#888); border-radius:12px; padding:2px 10px; font-size:11px; cursor:pointer; }
+.ev-feedback button:hover { border-color:var(--accent,#0af); color:var(--accent,#0af); }
 .event-card.is-medium { border-left: 3px solid var(--amber); }
 
 .ev-icon {
@@ -1359,5 +1362,21 @@ setInterval(loadAlerts, 20000);
 </div>
 
 <script src="/static/arm-widget.js"></script>
+<script>
+async function hgFeedback(eventId, feedback, btn) {
+  const container = document.getElementById('fb-' + eventId);
+  if (!container) return;
+  try {
+    const r = await fetch(API + '/api/events/' + eventId + '/feedback', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({feedback})
+    });
+    const d = await r.json();
+    if (d.ok) {
+      container.innerHTML = '<span style="font-size:11px;color:var(--muted)">✓ Guardado</span>';
+    }
+  } catch(e) { console.error('feedback error', e); }
+}
+</script>
 </body>
 </html>
