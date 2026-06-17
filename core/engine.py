@@ -81,15 +81,6 @@ class HomeGuardCore:
         except Exception as e:
             logger.warning(f"Aprendizaje no disponible: {e}")
 
-        # Sistema de aprendizaje adaptativo
-        self._learning = None
-        try:
-            from learning.context_builder import ContextBuilder
-            self._learning = ContextBuilder(storage_config.db_path)
-            logger.info("Sistema de aprendizaje activo")
-        except Exception as e:
-            logger.warning(f"Aprendizaje no disponible: {e}")
-
         self._stats = {
             "events_received": 0,
             "events_analyzed": 0,
