@@ -45,6 +45,15 @@ def create_app(db, port: int = 8000) -> FastAPI:
     # Páginas
     # -------------------------------------------------------
 
+
+    @app.get('/sw.js')
+    async def service_worker():
+        from fastapi.responses import FileResponse
+        r = FileResponse(str(static_path / 'sw.js'), media_type='application/javascript')
+        r.headers['Service-Worker-Allowed'] = '/'
+        r.headers['Cache-Control'] = 'no-cache'
+        return r
+
     @app.get("/")
     async def dashboard():
         return FileResponse(str(static_path / "index.html"))
