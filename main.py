@@ -7,18 +7,6 @@ import logging
 import signal
 import sys
 import os
-# Agregar junto a los otros imports:
-from push_module import push_router, init_push_db
-
-# Después de crear la app FastAPI:
-app.include_router(push_router)
-init_push_db()
-_PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
-if _PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, _PROJECT_ROOT)
-
-from config.settings import load_config, CameraConfig
-from core.engine import HomeGuardCore
 from core.health_monitor import HealthMonitor
 from adapters.rtsp_adapter import RTSPAdapter
 from adapters.onvif_adapter import ONVIFAdapter

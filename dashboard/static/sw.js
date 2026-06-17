@@ -1,7 +1,7 @@
 // HomeGuard AI — Service Worker
 // Habilita: instalación PWA, cache offline, notificaciones push
 
-const CACHE = 'homeguard-v7';
+const CACHE = 'homeguard-v8';
 const OFFLINE_URLS = ['/mobile', '/static/manifest.json'];
 
 // ─── Instalación ─────────────────────────────────────────────
@@ -93,33 +93,3 @@ self.addEventListener('notificationclick', e => {
   );
 });
 
-// ── WEB PUSH HomeGuard AI ──────────────────────────────────
-self.addEventListener('push', function(event) {
-    if (!event.data) return;
-    var data;
-    try { data = event.data.json(); }
-    catch(e) { data = {title:'HomeGuard AI', body:event.data.text(), data:{}}; }
-    event.waitUntil(
-        self.registration.showNotification(data.title || 'HomeGuard AI', {
-            body:    data.body  || '',
-            icon:    data.icon  || '/static/icon-192.png',
-            badge:   '/static/icon-192.png',
-            data:    data.data  || {},
-            vibrate: [200,100,200]
-        })
-    );
-});
-
-self.addEventListener('notificationclick', function(event) {
-    event.notification.close();
-    var url = (event.notification.data && event.notification.data.url) ? event.notification.data.url : '/mobile';
-    event.waitUntil(
-        clients.matchAll({type:'window', includeUncontrolled:true}).then(function(list) {
-            for (var i=0; i<list.length; i++) {
-                if (list[i].url.indexOf('/mobile') !== -1 && 'focus' in list[i])
-                    return list[i].focus();
-            }
-            if (clients.openWindow) return clients.openWindow(url);
-        })
-    );
-});
