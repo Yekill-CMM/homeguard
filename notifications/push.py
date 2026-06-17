@@ -19,7 +19,7 @@ from notifications.vapid import VAPIDManager
 logger = logging.getLogger(__name__)
 
 # Dirección del remitente (requerida por VAPID — puede ser ficticia en LAN)
-VAPID_CLAIMS_EMAIL = "homeguard@local.home"
+VAPID_CLAIMS_EMAIL = "https://5228.tailfc504d.ts.net"
 
 
 @dataclass
@@ -101,9 +101,9 @@ class PushNotifier:
         """Retorna todas las suscripciones activas."""
         with self.db._connect() as conn:
             rows = conn.execute(
-                "SELECT * FROM push_subscriptions"
+                "SELECT device_id, device_name, endpoint, p256dh, auth, created_at FROM push_subscriptions"
             ).fetchall()
-        return [PushSubscription(**dict(row), created_at=row["created_at"]) for row in rows]
+        return [PushSubscription(**dict(row)) for row in rows]
 
     def subscription_count(self) -> int:
         with self.db._connect() as conn:
@@ -231,19 +231,26 @@ class PushNotifier:
 
     def _send_one(self, sub: PushSubscription, payload: dict):
         """Envío sincrónico a un dispositivo (se ejecuta en thread pool)."""
-        webpush(
-            subscription_info={
-                "endpoint": sub.endpoint,
-                "keys": {
-                    "p256dh": sub.p256dh,
-                    "auth":   sub.auth,
+        import tempfile, os
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.pem', delete=False) as f:
+            f.write(self.vapid.private_key)
+            tmp_path = f.name
+        try:
+            webpush(
+                subscription_info={
+                    "endpoint": sub.endpoint,
+                    "keys": {
+                        "p256dh": sub.p256dh,
+                        "auth":   sub.auth,
+                    },
                 },
-            },
-            data=json.dumps(payload),
-            vapid_private_key=self.vapid.private_key,
-            vapid_claims={
-                "sub": f"mailto:{VAPID_CLAIMS_EMAIL}",
-            },
-            content_encoding="aes128gcm",
-        )
+                data=json.dumps(payload),
+                vapid_private_key=tmp_path,
+                vapid_claims={
+                    "sub": VAPID_CLAIMS_EMAIL,
+                },
+                content_encoding="aes128gcm",
+            )
+        finally:
+            os.unlink(tmp_path)
         logger.debug(f"✓ Push enviado a {sub.device_name}")

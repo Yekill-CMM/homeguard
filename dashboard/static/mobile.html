@@ -1306,7 +1306,16 @@ function getDeviceName() {
 
 // ─── Service Worker ───────────────────────────────────────
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js')
+  // Limpiar SWs viejos antes de registrar
+  navigator.serviceWorker.getRegistrations().then(regs => {
+    regs.forEach(r => {
+      if (r.active && r.active.scriptURL.indexOf('/sw.js') === -1) {
+        console.log('[HG] Eliminando SW viejo:', r.scope);
+        r.unregister();
+      }
+    });
+  });
+  navigator.serviceWorker.register('/sw.js', {scope: '/'})
     .then(reg => console.log('SW registrado:', reg.scope))
     .catch(err => console.warn('SW error:', err));
 }
