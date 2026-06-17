@@ -1149,12 +1149,14 @@ async function toggleNotifications(btn) {
     if (res.ok) {
       notifEnabled = true;
       btn.classList.add('on');
-      // Enviar notificación de prueba
       await fetch(`${API}/api/push/test`, { method: 'POST' });
+    } else {
+      const errText = await res.text().catch(()=>'?');
+      alert('Error servidor ' + res.status + ': ' + errText);
     }
   } catch(e) {
     console.error('Error suscribiendo push:', e);
-    alert('Error activando notificaciones: ' + e.message);
+    alert('Error push [' + e.name + ']: ' + (e.message || String(e)));
   }
 }
 
