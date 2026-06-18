@@ -2319,6 +2319,21 @@ async function deleteInfraDevice(id, name) {
 
 // ─── Init ─────────────────────────────────────────────────
 loadOverview();
+
+function showToast(msg, duration=3000) {
+  let toast = document.getElementById('hg-toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'hg-toast';
+    toast.style.cssText = 'position:fixed;bottom:24px;right:24px;background:var(--accent);color:#080c10;padding:12px 20px;border-radius:8px;font-family:var(--ui);font-size:14px;font-weight:600;z-index:9999;opacity:0;transition:opacity .3s';
+    document.body.appendChild(toast);
+  }
+  toast.textContent = msg;
+  toast.style.opacity = '1';
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => toast.style.opacity = '0', duration);
+}
+
 </script>
 <!-- MODAL ESCÁNER DE RED -->
 <div class="modal-bg" id="scanner-modal" onclick="if(event.target===this)closeScanner()" style="align-items:flex-start;padding-top:40px">
