@@ -1894,7 +1894,7 @@ async function loadClaudeAdmin() {
           <div class="item-icon">💰</div>
           <div class="item-info">
             <div class="item-name">Presupuesto mensual</div>
-            <div class="item-detail">USD ${(mn.cost_usd ?? 0).toFixed(3)} / ${cfg.monthly_budget_usd ?? 15} (${pctMon}%)${barStyle(pctMon, pctMon>80?'var(--red)':'var(--green)')}</div>
+            <div class="item-detail">USD ${(mn.cost_usd ?? 0).toFixed(2).replace('.',',')} / ${(cfg.monthly_budget_usd ?? 15).toFixed(2).replace('.',',')} (${pctMon}%)${barStyle(pctMon, pctMon>80?'var(--red)':'var(--green)')}</div>
           </div>
         </div>
         <div class="item-card">
@@ -1941,7 +1941,7 @@ async function loadClaudeAdmin() {
               </div>
               <span style="color:var(--text);min-width:70px;text-align:right">${h.calls} llamadas</span>
             </div>
-            <span class="log-ts" style="text-align:right;color:var(--green)">$${h.cost_usd.toFixed(3)}</span>
+            <span class="log-ts" style="text-align:right;color:var(--green)">$${h.cost_usd.toFixed(2).replace('.', ',')}</span>
           </div>`;
         }).join('')}</div>`;
       }
