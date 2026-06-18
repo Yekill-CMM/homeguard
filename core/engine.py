@@ -81,6 +81,11 @@ class HomeGuardCore:
         except Exception as e:
             logger.warning(f"Aprendizaje no disponible: {e}")
 
+        # Deduplicación de eventos repetidos por cámara
+        import time as _time
+        self._event_dedup: dict = {}  # (camera_id, event_type) → monotonic
+        self._dedup_window = float(os.environ.get("EVENT_DEDUP_S", "60"))
+
         self._stats = {
             "events_received": 0,
             "events_analyzed": 0,
@@ -114,6 +119,18 @@ class HomeGuardCore:
             return
         """Punto de entrada principal — llamado por los adaptadores."""
         self._stats["events_received"] += 1
+
+        # Deduplicación: descartar eventos repetidos de la misma cámara/tipo
+        import time as _time
+        _dedup_key = (str(event.camera_id), event.event_type.value)
+        _now = _time.monotonic()
+        if _now - self._event_dedup.get(_dedup_key, 0) < self._dedup_window:
+            logger.debug(
+                f"[{event.camera_name}] Dedup: {event.event_type.value} "
+                f"ya visto hace {_now - self._event_dedup.get(_dedup_key,0):.0f}s — descartado"
+            )
+            return
+        self._event_dedup[_dedup_key] = _now
 
         # ── Pre-filtro YOLO (si está disponible) ──────────────────────
         if self.yolo and event.snapshot:
