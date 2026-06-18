@@ -975,15 +975,20 @@ function showSection(name, btn) {
 
 async function loadSection(name) {
   if (name === 'overview')  return loadOverview();
-  if (name === 'cameras')   return loadCameras();
-  if (name === 'sensors')   return loadSensors();
-  if (name === 'zones')     return loadZones();
-  if (name === 'users')     return loadUsers();
-  if (name === 'devices')   return loadDevices();
-  if (name === 'health')    return loadHealth();
-  if (name === 'claude')    return loadClaudeAdmin();
-  if (name === 'infra')     return loadInfra();
-  if (name === 'audio')     return loadAudio();
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById(`section-${name}`)?.classList.add('active');
+  if (btn) btn.classList.add('active');
+
+  if (name === 'cameras')   loadCameras();
+  else if (name === 'sensors')   loadSensors();
+  else if (name === 'zones')     loadZones();
+  else if (name === 'users')     loadUsers();
+  else if (name === 'devices')   loadDevices();
+  else if (name === 'health')    loadHealth();
+  else if (name === 'claude')    loadClaudeAdmin();
+  else if (name === 'infra')     loadInfra();
+  else if (name === 'audio')     loadAudio();
 }
 
 // ─── Overview ─────────────────────────────────────────────
