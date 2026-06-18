@@ -1071,6 +1071,12 @@ def add_health_routes(app: FastAPI, core):
                 if limiter: limiter.cost_per_call_usd = val
                 updated["CLAUDE_COST_PER_CALL"] = f"{val:.4f}"
 
+            if "event_dedup_s" in body:
+                val = max(10, int(body["event_dedup_s"]))
+                if core and hasattr(core, "_dedup_window"):
+                    core._dedup_window = val
+                updated["EVENT_DEDUP_S"] = str(val)
+
         except (ValueError, TypeError) as e:
             return {"ok": False, "message": f"Valor inválido: {e}"}
 
@@ -1093,6 +1099,7 @@ def add_health_routes(app: FastAPI, core):
                 "monthly_budget_usd": limiter.monthly_budget_usd if limiter else None,
                 "camera_cooldown_s":  limiter.camera_cooldown_s  if limiter else None,
                 "cost_per_call_usd":  limiter.cost_per_call_usd  if limiter else None,
+                "event_dedup_s":       getattr(core, "_dedup_window", 60) if core else 60,
             }
         }
 

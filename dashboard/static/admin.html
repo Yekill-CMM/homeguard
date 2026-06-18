@@ -1797,6 +1797,7 @@ async function loadClaudeAdmin() {
       setInp('cl-inp-budget',   cfg.monthly_budget_usd);
       setInp('cl-inp-cooldown', cfg.camera_cooldown_s);
       setInp('cl-inp-cost',     cfg.cost_per_call_usd);
+      setInp('cl-inp-dedup',    cfg.event_dedup_s ?? 60);
     }
 
     // Historial
@@ -1830,6 +1831,7 @@ async function loadClaudeAdmin() {
 
 async function saveLimitsAdmin() {
   const daily    = document.getElementById('cl-inp-daily').value;
+  const dedup    = document.getElementById('cl-inp-dedup').value || '60';
   const budget   = document.getElementById('cl-inp-budget').value;
   const cooldown = document.getElementById('cl-inp-cooldown').value;
   const cost     = document.getElementById('cl-inp-cost').value;
@@ -1845,6 +1847,7 @@ async function saveLimitsAdmin() {
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
         daily_limit:        parseInt(daily),
+        event_dedup_s:      parseInt(dedup),
         monthly_budget_usd: parseFloat(budget),
         camera_cooldown_s:  parseInt(cooldown),
         cost_per_call_usd:  parseFloat(cost),
@@ -2420,6 +2423,12 @@ loadOverview();
             <div class="form-label" style="margin-bottom:6px">Costo est. por llamada (USD)</div>
             <input class="form-input" type="number" id="cl-inp-cost"
                    min="0.001" max="1" step="0.001" placeholder="0.015">
+          </div>
+          <div>
+            <div class="form-label" style="margin-bottom:6px">Ventana dedup eventos (seg)</div>
+            <input class="form-input" type="number" id="cl-inp-dedup"
+                   min="10" max="300" placeholder="60">
+            <div class="item-detail" style="margin-top:4px">Ignora eventos repetidos de la misma cámara/tipo dentro de este período</div>
           </div>
         </div>
         <div style="display:flex;justify-content:flex-end">
