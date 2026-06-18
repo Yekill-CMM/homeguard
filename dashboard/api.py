@@ -1226,7 +1226,17 @@ def add_health_routes(app: FastAPI, core):
                     env_text += f"\nANTHROPIC_API_KEY={api_key}\n"
                 env_path.write_text(env_text)
                 results["api_key"] = "actualizada"
-                results["message"] = "API key guardada en .env — reinicia el servicio para aplicar"
+                # Reiniciar servicio automáticamente para aplicar la nueva key
+                import subprocess
+                try:
+                    subprocess.run(
+                        ["sudo", "systemctl", "restart", "homeguard"],
+                        timeout=10, check=False
+                    )
+                    results["message"] = "API key guardada — servicio reiniciando..."
+                    results["restarting"] = True
+                except Exception as ex:
+                    results["message"] = f"API key guardada en .env — reinicia manualmente: {ex}"
             else:
                 return {"ok": False, "message": ".env no encontrado"}
 
