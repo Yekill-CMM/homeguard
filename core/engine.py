@@ -84,7 +84,7 @@ class HomeGuardCore:
         # Deduplicación de eventos repetidos por cámara
         import time as _time
         self._event_dedup: dict = {}  # (camera_id, event_type) → monotonic
-        self._dedup_window = float(os.environ.get("EVENT_DEDUP_S", "60"))
+        self._dedup_window = float(__import__("os").environ.get("EVENT_DEDUP_S", "60"))
 
         self._stats = {
             "events_received": 0,
