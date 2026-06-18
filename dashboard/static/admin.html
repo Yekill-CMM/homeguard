@@ -975,12 +975,7 @@ function showSection(name, btn) {
 
 async function loadSection(name) {
   if (name === 'overview')  return loadOverview();
-  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  document.getElementById(`section-${name}`)?.classList.add('active');
-  if (btn) btn.classList.add('active');
-
-  if (name === 'cameras')   loadCameras();
+  if (name === 'cameras')        loadCameras();
   else if (name === 'sensors')   loadSensors();
   else if (name === 'zones')     loadZones();
   else if (name === 'users')     loadUsers();
