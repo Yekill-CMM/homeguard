@@ -1849,9 +1849,9 @@ async function loadClaudeAdmin() {
     // Métricas
     const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
     set('cl-today-calls', td.calls    ?? 0);
-    set('cl-today-cost',  `$${(td.cost_usd ?? 0).toFixed(3)}`);
-    set('cl-month-cost',  `$${(mn.cost_usd ?? 0).toFixed(3)}`);
-    set('cl-remaining',   `$${(mn.remaining ?? 15).toFixed(2)}`);
+    set('cl-today-cost',  `$${(td.cost_usd ?? 0).toFixed(2).replace('.',',')}`);
+    set('cl-month-cost',  `$${(mn.cost_usd ?? 0).toFixed(2).replace('.',',')}`);
+    set('cl-remaining',   `$${(mn.remaining ?? 15).toFixed(2).replace('.',',')}`);
 
     // Badge nav
     const badge = document.getElementById('cnt-claude');
