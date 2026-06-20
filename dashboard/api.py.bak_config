@@ -1185,21 +1185,11 @@ def add_health_routes(app: FastAPI, core):
         )
         masked = f"sk-ant-...{api_key[-6:]}" if configured else "No configurada"
 
-        stats = limiter.stats() if limiter else {}
-        # Agregar config de límites (incluyendo event_dedup_s desde core)
-        stats["config"] = {
-            "daily_limit":        limiter.daily_limit if limiter else 200,
-            "monthly_budget_usd": limiter.monthly_budget_usd if limiter else 15.0,
-            "camera_cooldown_s":  limiter.camera_cooldown_s if limiter else 6,
-            "cost_per_call_usd":  limiter.cost_per_call_usd if limiter else 0.015,
-            "event_dedup_s":      getattr(core, "_dedup_window", 60) if core else 60,
-        }
-
         return {
             "enabled":            enabled,
             "api_key_configured": configured,
             "api_key_masked":     masked,
-            "stats":              stats,
+            "stats":              limiter.stats() if limiter else {},
         }
 
     @app.post("/api/claude/config")
