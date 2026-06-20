@@ -1038,7 +1038,6 @@ def add_health_routes(app: FastAPI, core):
             "monthly_budget_usd":   limiter.monthly_budget_usd,
             "camera_cooldown_s":    limiter.camera_cooldown_s,
             "cost_per_call_usd":    limiter.cost_per_call_usd,
-            "event_dedup_s":        getattr(core, "_dedup_window", 60) if core else 60,
         }
 
     @app.post("/api/claude/limits")
