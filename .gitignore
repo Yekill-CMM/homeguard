@@ -19,3 +19,4 @@ __pycache__/
 *.bak
 dashboard/api.py.bak_dedup
 *.bak_dedup
+dashboard/api.py.bak_*
