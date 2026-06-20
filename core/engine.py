@@ -132,6 +132,72 @@ class HomeGuardCore:
             return
         self._event_dedup[_dedup_key] = _now
 
+        # ── Detección de TAMPER / Movimiento de cámara ──────────────
+        if event.event_type == EventType.TAMPER:
+            logger.warning(
+                f"🚨 TAMPER/CAMERA MOVEMENT detectado en {event.camera_name} "
+                f"— reseteando baseline de eventos"
+            )
+            # Resetear baseline para no contaminar estadísticas con datos de cámara movida
+            if self._learning:
+                try:
+                    self._learning.scorer.reset_camera_baseline(event.camera_name)
+                    self._learning.scorer.record_baseline_reset(
+                        event.camera_name,
+                        reason="camera_tamper"
+                    )
+                except Exception as e:
+                    logger.warning(f"Error resetting baseline on tamper: {e}")
+            
+            # Registrar evento normalmente pero con cooldown más largo para tamper
+            await self._persist(event)
+            self._stats["alerts_triggered"] += 1
+            return
+
+        # ── Detección de TAMPER / Movimiento de cámara ──────────────
+        if event.event_type == EventType.TAMPER:
+            logger.warning(
+                f"🚨 TAMPER/CAMERA MOVEMENT detectado en {event.camera_name} "
+                f"— reseteando baseline de eventos"
+            )
+            # Resetear baseline para no contaminar estadísticas con datos de cámara movida
+            if self._learning:
+                try:
+                    self._learning.scorer.reset_camera_baseline(event.camera_name)
+                    self._learning.scorer.record_baseline_reset(
+                        event.camera_name,
+                        reason="camera_tamper"
+                    )
+                except Exception as e:
+                    logger.warning(f"Error resetting baseline on tamper: {e}")
+            
+            # Registrar evento normalmente pero con cooldown más largo para tamper
+            await self._persist(event)
+            self._stats["alerts_triggered"] += 1
+            return
+
+        # ── Detección de TAMPER / Movimiento de cámara ──────────────
+        if event.event_type == EventType.TAMPER:
+            logger.warning(
+                f"🚨 TAMPER/CAMERA MOVEMENT detectado en {event.camera_name} "
+                f"— reseteando baseline de eventos"
+            )
+            # Resetear baseline para no contaminar estadísticas con datos de cámara movida
+            if self._learning:
+                try:
+                    self._learning.scorer.reset_camera_baseline(event.camera_name)
+                    self._learning.scorer.record_baseline_reset(
+                        event.camera_name,
+                        reason="camera_tamper"
+                    )
+                except Exception as e:
+                    logger.warning(f"Error resetting baseline on tamper: {e}")
+            
+            # Registrar evento normalmente pero con cooldown más largo para tamper
+            await self._persist(event)
+            self._stats["alerts_triggered"] += 1
+            return
+
         # ── Pre-filtro YOLO (si está disponible) ──────────────────────
         if self.yolo and event.snapshot:
             import cv2

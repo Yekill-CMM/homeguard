@@ -19,6 +19,24 @@ class AnomalyScorer:
 
     def __init__(self, db_path: str):
         self.db_path = db_path
+        self._init_tables()
+
+    def _init_tables(self):
+        """Crea tabla baseline_resets para auditoría."""
+        try:
+            import sqlite3
+            with sqlite3.connect(self.db_path) as conn:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS baseline_resets (
+                        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                        camera_name TEXT NOT NULL,
+                        reason      TEXT,
+                        timestamp   TEXT DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                conn.commit()
+        except Exception as e:
+            logger.warning(f"Error creating baseline_resets table: {e}")
 
     def score(self, camera_name: str, timestamp: datetime, event_type: str) -> dict:
         """
