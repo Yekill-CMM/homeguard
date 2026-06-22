@@ -1279,6 +1279,7 @@ async function loadClaudeStats() {
     setInp('lim-budget',   cfg.monthly_budget_usd);
     setInp('lim-cooldown', cfg.camera_cooldown_s);
     setInp('lim-cost',     cfg.cost_per_call_usd);
+    setInp('lim-dedup',    cfg.event_dedup_s);
     set('cv-today',     `${td.calls ?? 0} llamadas · USD ${(td.cost_usd ?? 0).toFixed(3)}`);
     set('cv-month',     `USD ${(mn.cost_usd ?? 0).toFixed(3)} (${mn.pct ?? 0}%)`);
     set('cv-budget',    `USD ${mn.budget_usd ?? 15} / mes`);
