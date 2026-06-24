@@ -38,6 +38,7 @@ class ONVIFAdapter(BaseAdapter):
         self._port = 80
         self._user = camera_config.onvif_user or "admin"
         self._password = camera_config.onvif_password or ""
+        self._snapshot_url: Optional[str] = None  # Cache de URL snapshot
 
     async def start(self) -> bool:
         try:
@@ -257,17 +258,60 @@ class ONVIFAdapter(BaseAdapter):
         )
 
     def _get_snapshot(self) -> Optional[bytes]:
-        """Obtiene snapshot JPEG de la cámara."""
+        """
+        Obtiene snapshot JPEG via ONVIF GetSnapshotUri.
+        Hanwha Wisenet usa /stw-cgi/video.cgi — la URL se obtiene
+        dinámicamente del servicio de media para máxima compatibilidad.
+        """
+        # Usar URL cacheada si ya la tenemos
+        if self._snapshot_url:
+            result = self._fetch_snapshot_url(self._snapshot_url)
+            if result:
+                return result
+            # Si falló, reintentar obteniendo la URL de nuevo
+            self._snapshot_url = None
+
+        # Obtener URL desde ONVIF GetSnapshotUri
+        try:
+            if self._cam is None:
+                return None
+            media = self._cam.create_media_service()
+            profiles = media.GetProfiles()
+            # Preferir profile2 (H.264 calidad media), fallback al primero
+            target = None
+            for p in profiles:
+                if p.token in ("DefaultProfile-02", "profile2", "Profile_2"):
+                    target = p.token
+                    break
+            if target is None and profiles:
+                target = profiles[0].token
+            if target is None:
+                return None
+            uri_response = media.GetSnapshotUri({"ProfileToken": target})
+            self._snapshot_url = uri_response.Uri
+            self.logger.debug(f"Snapshot URI: {self._snapshot_url}")
+            return self._fetch_snapshot_url(self._snapshot_url)
+        except Exception as e:
+            self.logger.warning(f"GetSnapshotUri falló: {e}")
+            return None
+
+    def _fetch_snapshot_url(self, url: str) -> Optional[bytes]:
+        """Descarga el snapshot desde la URL con autenticación Digest."""
         try:
             import urllib.request
-            url = f"http://{self._host}/onvif/snapshot"
             password_mgr = urllib.request.HTTPPasswordMgrWithDefaultRealm()
             password_mgr.add_password(None, url, self._user, self._password)
             auth_handler = urllib.request.HTTPDigestAuthHandler(password_mgr)
             opener = urllib.request.build_opener(auth_handler)
-            with opener.open(url, timeout=3) as response:
-                return response.read()
-        except Exception:
+            with opener.open(url, timeout=4) as response:
+                data = response.read()
+                # Verificar que es un JPEG válido
+                if data and data[:2] == b'\xff\xd8':
+                    return data
+                self.logger.warning(f"Snapshot no es JPEG válido ({len(data)} bytes)")
+                return None
+        except Exception as e:
+            self.logger.warning(f"Error descargando snapshot: {e}")
             return None
 
     def _extract_host(self, rtsp_url: str) -> str:
