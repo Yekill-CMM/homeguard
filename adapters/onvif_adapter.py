@@ -178,7 +178,7 @@ class ONVIFAdapter(BaseAdapter):
                     event_type=EventType.INTRUSION,
                     severity=Severity.HIGH,
                     confidence=0.90,
-                    needs_claude=False,
+                    needs_claude=True,
                     meta={'action': action, 'state': state, 'type': 'virtual_line'}
                 )
 
