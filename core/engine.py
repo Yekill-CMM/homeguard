@@ -86,6 +86,12 @@ class HomeGuardCore:
         self._event_dedup: dict = {}  # (camera_id, event_type) → monotonic
         self._dedup_window = float(__import__("os").environ.get("EVENT_DEDUP_S", "60"))
 
+        # Detección de vehículo estacionario: bbox anterior por camera_id
+        # clave: camera_id (str) → {"bbox": (x1,y1,x2,y2), "ts": monotonic}
+        self._vehicle_bbox: dict = {}
+        self._stationary_iou = float(__import__("os").environ.get("STATIONARY_IOU", "0.50"))
+        self._stationary_window = float(__import__("os").environ.get("STATIONARY_WINDOW_S", "300"))
+
         self._stats = {
             "events_received": 0,
             "events_analyzed": 0,
@@ -138,7 +144,6 @@ class HomeGuardCore:
                 f"🚨 TAMPER/CAMERA MOVEMENT detectado en {event.camera_name} "
                 f"— reseteando baseline de eventos"
             )
-            # Resetear baseline para no contaminar estadísticas con datos de cámara movida
             if self._learning:
                 try:
                     self._learning.scorer.reset_camera_baseline(event.camera_name)
@@ -148,30 +153,10 @@ class HomeGuardCore:
                     )
                 except Exception as e:
                     logger.warning(f"Error resetting baseline on tamper: {e}")
-            
-            # Registrar evento normalmente pero con cooldown más largo para tamper
-            await self._persist(event)
-            self._stats["alerts_triggered"] += 1
-            return
 
-        # ── Detección de TAMPER / Movimiento de cámara ──────────────
-        if event.event_type == EventType.TAMPER:
-            logger.warning(
-                f"🚨 TAMPER/CAMERA MOVEMENT detectado en {event.camera_name} "
-                f"— reseteando baseline de eventos"
-            )
-            # Resetear baseline para no contaminar estadísticas con datos de cámara movida
-            if self._learning:
-                try:
-                    self._learning.scorer.reset_camera_baseline(event.camera_name)
-                    self._learning.scorer.record_baseline_reset(
-                        event.camera_name,
-                        reason="camera_tamper"
-                    )
-                except Exception as e:
-                    logger.warning(f"Error resetting baseline on tamper: {e}")
-            
-            # Registrar evento normalmente pero con cooldown más largo para tamper
+            # Resetear bbox de vehículo estacionario (posición inválida tras tamper)
+            self._vehicle_bbox.pop(str(event.camera_id), None)
+
             await self._persist(event)
             self._stats["alerts_triggered"] += 1
             return
@@ -225,6 +210,32 @@ class HomeGuardCore:
                     mapping = YOLO_EVENT_MAP.get(
                         yolo_result.event_type, (EventType.UNKNOWN, Severity.LOW)
                     )
+
+                    # ── Filtro vehículo estacionario ──────────────────────────
+                    if (yolo_result.event_type == "vehicle"
+                            and yolo_result.bbox is not None):
+                        import time as _t
+                        cam_key = str(event.camera_id)
+                        _mono = _t.monotonic()
+                        prev = self._vehicle_bbox.get(cam_key)
+                        if prev:
+                            iou = self._calc_iou(prev["bbox"], yolo_result.bbox)
+                            elapsed_since = _mono - prev["ts"]
+                            if (iou >= self._stationary_iou
+                                    and elapsed_since < self._stationary_window):
+                                self._stats["events_skipped_ai"] += 1
+                                logger.debug(
+                                    f"[{event.camera_name}] Vehículo estacionario "
+                                    f"(IoU={iou:.2f}, {elapsed_since:.0f}s) — suprimido"
+                                )
+                                return
+                            logger.info(
+                                f"[{event.camera_name}] Vehículo movido "
+                                f"(IoU={iou:.2f}) — evento permitido"
+                            )
+                        self._vehicle_bbox[cam_key] = {"bbox": yolo_result.bbox, "ts": _mono}
+                    # ─────────────────────────────────────────────────────────
+
                     event.event_type = mapping[0]
                     event.severity   = mapping[1]
                     event.confidence = yolo_result.confidence
@@ -405,3 +416,26 @@ class HomeGuardCore:
 
 def _now_ms() -> int:
     return int(datetime.now().timestamp() * 1000)
+
+    def _calc_iou(self, bbox_a: tuple, bbox_b: tuple) -> float:
+        """
+        Calcula Intersection over Union entre dos bounding boxes.
+        Formato: (x1, y1, x2, y2)
+        Retorna 0.0–1.0 (1.0 = mismo bbox exacto)
+        """
+        ax1, ay1, ax2, ay2 = bbox_a
+        bx1, by1, bx2, by2 = bbox_b
+
+        ix1 = max(ax1, bx1)
+        iy1 = max(ay1, by1)
+        ix2 = min(ax2, bx2)
+        iy2 = min(ay2, by2)
+
+        inter = max(0, ix2 - ix1) * max(0, iy2 - iy1)
+        if inter == 0:
+            return 0.0
+
+        area_a = (ax2 - ax1) * (ay2 - ay1)
+        area_b = (bx2 - bx1) * (by2 - by1)
+        union  = area_a + area_b - inter
+        return inter / union if union > 0 else 0.0
