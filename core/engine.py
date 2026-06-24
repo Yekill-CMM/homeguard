@@ -439,3 +439,25 @@ def _now_ms() -> int:
         area_b = (bx2 - bx1) * (by2 - by1)
         union  = area_a + area_b - inter
         return inter / union if union > 0 else 0.0
+
+    def _calc_iou(self, bbox_a: tuple, bbox_b: tuple) -> float:
+        """
+        Intersection over Union entre dos bounding boxes (x1,y1,x2,y2).
+        Retorna 0.0–1.0 (1.0 = mismo bbox exacto, 0.0 = sin overlap)
+        """
+        ax1, ay1, ax2, ay2 = bbox_a
+        bx1, by1, bx2, by2 = bbox_b
+
+        ix1 = max(ax1, bx1)
+        iy1 = max(ay1, by1)
+        ix2 = min(ax2, bx2)
+        iy2 = min(ay2, by2)
+
+        inter = max(0, ix2 - ix1) * max(0, iy2 - iy1)
+        if inter == 0:
+            return 0.0
+
+        area_a = (ax2 - ax1) * (ay2 - ay1)
+        area_b = (bx2 - bx1) * (by2 - by1)
+        union  = area_a + area_b - inter
+        return inter / union if union > 0 else 0.0
