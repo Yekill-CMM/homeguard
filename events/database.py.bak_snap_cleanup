@@ -431,38 +431,6 @@ class EventDatabase:
             logger.info(f"Limpieza: {deleted} eventos eliminados (>{retention_days} días)")
         return deleted
 
-
-    def cleanup_old_snapshots(self, retention_days: int = 7) -> int:
-        """Borra archivos físicos de snapshots > retention_days días.
-        Mantiene el registro en DB con snapshot_path = NULL."""
-        from pathlib import Path as _Path
-        cutoff = (datetime.now() - timedelta(days=retention_days)).isoformat()
-        with self._connect() as conn:
-            rows = conn.execute("""
-                SELECT id, snapshot_path FROM events
-                WHERE timestamp < ? AND snapshot_path IS NOT NULL AND snapshot_path != ''
-            """, (cutoff,)).fetchall()
-        if not rows:
-            return 0
-        ids_cleared = []
-        for row in rows:
-            ev_id, snap_path = row[0], row[1]
-            for candidate in [_Path(snap_path), _Path.home() / "homeguard" / "data" / snap_path]:
-                if candidate.exists():
-                    try:
-                        candidate.unlink()
-                    except Exception as e:
-                        logger.warning(f"No se pudo borrar {candidate}: {e}")
-                    break
-            ids_cleared.append(ev_id)
-        if ids_cleared:
-            with self._connect() as conn:
-                conn.executemany("UPDATE events SET snapshot_path = NULL WHERE id = ?",
-                                 [(eid,) for eid in ids_cleared])
-                conn.commit()
-        logger.info(f"Limpieza snapshots: {len(ids_cleared)} archivos (>{retention_days}d) — DB conservada")
-        return len(ids_cleared)
-
     def vacuum(self):
         """Compacta la base de datos (libera espacio tras cleanup)."""
         with self._connect() as conn:

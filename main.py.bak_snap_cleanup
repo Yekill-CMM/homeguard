@@ -171,7 +171,6 @@ async def main():
             app, host="0.0.0.0", port=config.api_port, log_level="warning",
         )).serve()
     )
-    asyncio.create_task(_daily_snapshot_cleanup(core.db))
     logger.info(f"Dashboard disponible en http://localhost:{config.api_port}")
 
     def shutdown(sig, frame):
@@ -194,21 +193,6 @@ async def main():
     except asyncio.CancelledError:
         pass
 
-
-
-async def _daily_snapshot_cleanup(db):
-    """Borra snapshots físicos > SNAPSHOT_RETENTION_DAYS días (defecto 7)."""
-    import asyncio as _asyncio, os as _os
-    retention = int(_os.environ.get("SNAPSHOT_RETENTION_DAYS", "7"))
-    logger.info(f"[Cleanup] Retención de snapshots activa: {retention} días")
-    while True:
-        await _asyncio.sleep(86400)
-        try:
-            deleted = db.cleanup_old_snapshots(retention_days=retention)
-            if deleted:
-                logger.info(f"[Cleanup] {deleted} snapshots purgados")
-        except Exception as e:
-            logger.error(f"[Cleanup] Error: {e}")
 
 async def _shutdown(adapters, core):
     for adapter in adapters:

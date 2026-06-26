@@ -117,11 +117,6 @@ class HomeGuardCore:
         from core.claude_limiter import ClaudeLimiter
         self.limiter = ClaudeLimiter(db_path=storage_config.db_path)
 
-        # Cache de cámaras con vehículos conocidos (TTL 60s)
-        self._known_vehicle_cameras: set = set()
-        self._kv_cache_ts: float = 0.0
-        self._kv_cache_ttl: float = 60.0
-
     async def handle_event(self, event: SecurityEvent):
         presence = getattr(self, "presence", None)
         if presence and not presence.should_process_event(
@@ -239,24 +234,6 @@ class HomeGuardCore:
                                 f"(IoU={iou:.2f}) — evento permitido"
                             )
                         self._vehicle_bbox[cam_key] = {"bbox": yolo_result.bbox, "ts": _mono}
-                    # ─────────────────────────────────────────────────────────
-
-                    # ── Vehículo conocido: registrar sin alerta push ──────────
-                    import time as _tc
-                    if _tc.monotonic() - self._kv_cache_ts > self._kv_cache_ttl:
-                        try:
-                            self._known_vehicle_cameras = self.db.get_known_vehicle_cameras()
-                        except Exception:
-                            self._known_vehicle_cameras = set()
-                        self._kv_cache_ts = _tc.monotonic()
-                    if str(event.camera_id) in self._known_vehicle_cameras:
-                        event.ai_alert = False
-                        event.ai_alert_reason = None
-                        event.ai_description = (
-                            f"{yolo_result.label} detectado — vehículo conocido "
-                            f"(YOLO {yolo_result.confidence:.0%})"
-                        )
-                        logger.info(f"[{event.camera_name}] Vehículo conocido — sin alerta push")
                     # ─────────────────────────────────────────────────────────
 
                     event.event_type = mapping[0]
@@ -380,26 +357,13 @@ class HomeGuardCore:
             logger.error(f"Error en análisis Claude: {e}")
 
     async def _evaluate_alert(self, event: SecurityEvent):
-        """Decide si hay que disparar una alerta y por qué canal.
-        Solo push si el evento está confirmado como persona/vehículo/crítico.
-        motion/animal/no_threat/unknown → silencioso (se registra, sin push).
-        """
-        SILENT_TYPES = {
-            EventType.MOTION, EventType.ANIMAL,
-            EventType.NO_THREAT, EventType.UNKNOWN,
-        }
-        ALERT_TYPES = {
-            EventType.INTRUSION, EventType.FIRE, EventType.GAS, EventType.TAMPER,
-            EventType.PERSON, EventType.VEHICLE,
-        }
-        if event.event_type in SILENT_TYPES:
-            logger.debug(f"[{event.camera_name}] {event.event_type.value} → silencioso (sin push)")
-            return
+        """Decide si hay que disparar una alerta y por qué canal."""
         should_alert = (
-            event.event_type in ALERT_TYPES or
             event.ai_alert or
-            event.severity in (Severity.HIGH, Severity.CRITICAL)
+            event.severity in (Severity.HIGH, Severity.CRITICAL) or
+            event.event_type in (EventType.INTRUSION, EventType.FIRE, EventType.GAS, EventType.TAMPER)
         )
+
         if should_alert:
             self._stats["alerts_triggered"] += 1
             await self._trigger_alert(event)

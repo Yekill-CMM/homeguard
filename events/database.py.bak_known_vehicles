@@ -121,16 +121,6 @@ CREATE TABLE IF NOT EXISTS audio_events (
 CREATE INDEX IF NOT EXISTS idx_audio_timestamp  ON audio_events(timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_audio_sound_type ON audio_events(sound_type);
 CREATE INDEX IF NOT EXISTS idx_audio_severity   ON audio_events(severity);
-
--- Vehículos conocidos por cámara (no generan alerta push)
-CREATE TABLE IF NOT EXISTS known_vehicles (
-    id          TEXT PRIMARY KEY,
-    camera_id   TEXT NOT NULL,
-    label       TEXT NOT NULL,
-    notes       TEXT,
-    created_at  TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_kv_camera ON known_vehicles(camera_id);
 """
 
 
@@ -431,38 +421,6 @@ class EventDatabase:
             logger.info(f"Limpieza: {deleted} eventos eliminados (>{retention_days} días)")
         return deleted
 
-
-    def cleanup_old_snapshots(self, retention_days: int = 7) -> int:
-        """Borra archivos físicos de snapshots > retention_days días.
-        Mantiene el registro en DB con snapshot_path = NULL."""
-        from pathlib import Path as _Path
-        cutoff = (datetime.now() - timedelta(days=retention_days)).isoformat()
-        with self._connect() as conn:
-            rows = conn.execute("""
-                SELECT id, snapshot_path FROM events
-                WHERE timestamp < ? AND snapshot_path IS NOT NULL AND snapshot_path != ''
-            """, (cutoff,)).fetchall()
-        if not rows:
-            return 0
-        ids_cleared = []
-        for row in rows:
-            ev_id, snap_path = row[0], row[1]
-            for candidate in [_Path(snap_path), _Path.home() / "homeguard" / "data" / snap_path]:
-                if candidate.exists():
-                    try:
-                        candidate.unlink()
-                    except Exception as e:
-                        logger.warning(f"No se pudo borrar {candidate}: {e}")
-                    break
-            ids_cleared.append(ev_id)
-        if ids_cleared:
-            with self._connect() as conn:
-                conn.executemany("UPDATE events SET snapshot_path = NULL WHERE id = ?",
-                                 [(eid,) for eid in ids_cleared])
-                conn.commit()
-        logger.info(f"Limpieza snapshots: {len(ids_cleared)} archivos (>{retention_days}d) — DB conservada")
-        return len(ids_cleared)
-
     def vacuum(self):
         """Compacta la base de datos (libera espacio tras cleanup)."""
         with self._connect() as conn:
@@ -475,51 +433,6 @@ class EventDatabase:
             return os.path.getsize(self.db_path) / (1024 * 1024)
         except FileNotFoundError:
             return 0.0
-
-    # ------------------------------------------------------------------
-    # Vehículos conocidos
-    # ------------------------------------------------------------------
-
-    def get_known_vehicle_cameras(self) -> set:
-        with self._connect() as conn:
-            rows = conn.execute("SELECT DISTINCT camera_id FROM known_vehicles").fetchall()
-        return {r[0] for r in rows}
-
-    def get_known_vehicles(self) -> list[dict]:
-        with self._connect() as conn:
-            rows = conn.execute("SELECT * FROM known_vehicles ORDER BY camera_id, label").fetchall()
-        return [dict(r) for r in rows]
-
-    def save_known_vehicle(self, vehicle: dict) -> bool:
-        try:
-            from datetime import datetime as _dt
-            import uuid as _uuid
-            now = _dt.now().isoformat()
-            with self._connect() as conn:
-                conn.execute("""
-                    INSERT OR REPLACE INTO known_vehicles (id, camera_id, label, notes, created_at)
-                    VALUES (:id, :camera_id, :label, :notes, :created_at)
-                """, {
-                    "id": vehicle.get("id") or str(_uuid.uuid4()),
-                    "camera_id": vehicle["camera_id"],
-                    "label": vehicle["label"],
-                    "notes": vehicle.get("notes"),
-                    "created_at": vehicle.get("created_at", now),
-                })
-                conn.commit()
-            return True
-        except Exception as e:
-            logger.error(f"Error guardando known_vehicle: {e}"); return False
-
-    def delete_known_vehicle(self, vehicle_id: str) -> bool:
-        try:
-            with self._connect() as conn:
-                conn.execute("DELETE FROM known_vehicles WHERE id=?", (vehicle_id,))
-                conn.commit()
-            return True
-        except Exception as e:
-            logger.error(f"Error eliminando known_vehicle {vehicle_id}: {e}"); return False
-
 
     # ------------------------------------------------------------------
     # Dispositivos de infraestructura
