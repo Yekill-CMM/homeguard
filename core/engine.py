@@ -381,28 +381,61 @@ class HomeGuardCore:
 
     async def _evaluate_alert(self, event: SecurityEvent):
         """Decide si hay que disparar una alerta y por qué canal.
-        Solo push si el evento está confirmado como persona/vehículo/crítico.
-        motion/animal/no_threat/unknown → silencioso (se registra, sin push).
+
+        Lógica por capas:
+        1. SILENT_TYPES (motion/animal/no_threat/unknown) → siempre silencioso.
+        2. SAFETY_ALWAYS (fire/gas/tamper/co2/smoke) → push SIEMPRE, sin importar modo.
+        3. ALERT_TYPES (person/vehicle/intrusion) → push solo si sistema ARMADO.
+           - disarmed: solo registrar en BD, sin push.
+           - partial / full: push normal.
         """
         SILENT_TYPES = {
             EventType.MOTION, EventType.ANIMAL,
             EventType.NO_THREAT, EventType.UNKNOWN,
         }
-        ALERT_TYPES = {
-            EventType.INTRUSION, EventType.FIRE, EventType.GAS, EventType.TAMPER,
-            EventType.PERSON, EventType.VEHICLE,
+        SAFETY_ALWAYS = {
+            EventType.FIRE, EventType.GAS, EventType.TAMPER,
         }
+        ALERT_TYPES = {
+            EventType.INTRUSION, EventType.PERSON, EventType.VEHICLE,
+        }
+
+        # Capa 1: eventos silenciosos — nunca generan push
         if event.event_type in SILENT_TYPES:
             logger.debug(f"[{event.camera_name}] {event.event_type.value} → silencioso (sin push)")
             return
+
+        # Capa 2: safety crítica — push siempre, independiente del modo
+        if event.event_type in SAFETY_ALWAYS:
+            logger.warning(f"[{event.camera_name}] SAFETY {event.event_type.value} → push incondicional")
+            self._stats["alerts_triggered"] += 1
+            await self._trigger_alert(event)
+            return
+
+        # Capa 3: eventos de seguridad — dependen del modo armado
         should_alert = (
             event.event_type in ALERT_TYPES or
             event.ai_alert or
             event.severity in (Severity.HIGH, Severity.CRITICAL)
         )
-        if should_alert:
-            self._stats["alerts_triggered"] += 1
-            await self._trigger_alert(event)
+        if not should_alert:
+            return
+
+        # Consultar modo armado
+        presence = getattr(self, "presence", None)
+        mode = presence.get_mode() if presence else "full"
+
+        if mode == "disarmed":
+            logger.info(
+                f"[{event.camera_name}] {event.event_type.value} → registrado sin push "
+                f"(sistema desarmado)"
+            )
+            return
+
+        # partial o full → disparar alerta
+        logger.info(f"[{event.camera_name}] {event.event_type.value} → push (modo={mode})")
+        self._stats["alerts_triggered"] += 1
+        await self._trigger_alert(event)
 
     async def _trigger_alert(self, event: SecurityEvent):
         """Dispara alertas por los canales configurados."""
