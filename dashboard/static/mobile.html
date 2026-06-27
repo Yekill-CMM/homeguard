@@ -1099,19 +1099,14 @@ async function loadSettings() {
     const swUrl = navigator.serviceWorker.controller.scriptURL;
     navigator.serviceWorker.controller.postMessage({ type: 'GET_CACHE_NAME' });
   }
-  // Leer cache name desde el SW registrado
+  // Leer cache name directo desde la Cache API
   try {
-    const reg = await navigator.serviceWorker.getRegistration();
-    if (reg && reg.active) {
-      const channel = new MessageChannel();
-      channel.port1.onmessage = (e) => {
-        if (e.data && e.data.cacheName) {
-          document.getElementById('set-sw-version').textContent = e.data.cacheName;
-        }
-      };
-      reg.active.postMessage({ type: 'GET_CACHE_NAME' }, [channel.port2]);
-    }
-  } catch(e) {}
+    const keys = await caches.keys();
+    const hgCache = keys.find(k => k.startsWith('homeguard-')) || '—';
+    document.getElementById('set-sw-version').textContent = hgCache;
+  } catch(e) {
+    document.getElementById('set-sw-version').textContent = '—';
+  }
   try {
     const h = await fetch(`${API}/api/health`).then(r=>r.json());
     document.getElementById('set-status').textContent = h.status === 'online' ? '🟢 Online' : '🔴 Offline';
