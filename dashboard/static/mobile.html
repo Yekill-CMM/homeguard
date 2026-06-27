@@ -1189,6 +1189,8 @@ function checkOnboarding() {
     document.getElementById('page-onboarding').style.display = 'flex';
     const tb = document.querySelector('.tabbar');
     if (tb) tb.style.display = 'none';
+    const widget = document.getElementById('hg-arm-widget');
+    if (widget) widget.style.display = 'none';
     document.getElementById('page-home').classList.remove('active');
   }
 }
@@ -1249,6 +1251,8 @@ function finishOnboarding() {
   document.getElementById('page-onboarding').style.display = 'none';
   const tb = document.querySelector('.tabbar');
   if (tb) tb.style.display = '';
+  const widget = document.getElementById('hg-arm-widget');
+  if (widget) widget.style.display = '';
   document.getElementById('page-home').classList.add('active');
   const url = new URL(window.location);
   url.searchParams.delete('register');
