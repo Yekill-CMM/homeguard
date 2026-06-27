@@ -615,6 +615,31 @@ html, body {
   <div class="pages">
 
     <!-- INICIO -->
+    <div id="page-onboarding" style="display:none;flex-direction:column;align-items:center;justify-content:center;min-height:100dvh;padding:2rem;gap:1.5rem;text-align:center;">
+        <div style="font-size:48px">🏠</div>
+        <div style="font-size:20px;font-weight:500;color:var(--text-primary)">HomeGuard AI</div>
+        <div style="font-size:14px;color:var(--text-secondary);max-width:280px;line-height:1.6">
+          Para detectar tu presencia en casa ingresa tu nombre. El sistema registrará este dispositivo automáticamente.
+        </div>
+        <div style="width:100%;max-width:320px;display:flex;flex-direction:column;gap:12px">
+          <input id="ob-name" type="text" placeholder="Tu nombre (ej: María)"
+            style="width:100%;box-sizing:border-box;font-size:16px;padding:12px;border-radius:10px;border:1px solid var(--border-strong);background:var(--surface-1);color:var(--text-primary)"
+            autocomplete="given-name" autocapitalize="words">
+          <input id="ob-device" type="text" placeholder="Nombre del dispositivo (opcional)"
+            style="width:100%;box-sizing:border-box;font-size:16px;padding:12px;border-radius:10px;border:1px solid var(--border-strong);background:var(--surface-1);color:var(--text-primary)"
+            autocomplete="off">
+          <button id="ob-btn" onclick="submitOnboarding()"
+            style="width:100%;padding:14px;border-radius:10px;border:none;background:#1D9E75;color:#fff;font-size:16px;font-weight:500;cursor:pointer">
+            Registrar este dispositivo
+          </button>
+          <div id="ob-error" style="font-size:13px;color:var(--text-danger);display:none"></div>
+          <button onclick="skipOnboarding()"
+            style="background:none;border:none;font-size:13px;color:var(--text-muted);cursor:pointer;padding:4px">
+            Omitir por ahora
+          </button>
+        </div>
+      </div>
+
     <div class="page active" id="page-home">
       <div class="metrics-row">
         <div class="metric-card">
@@ -1142,9 +1167,82 @@ async function loadSettings() {
   } catch(e) {
     document.getElementById('set-status').textContent = '🔴 Sin conexión';
   }
-  document.getElementById('qr-url').textContent = `${API}/mobile`;
+  const qrRegUrl = `${API}/mobile?register=1`;
+  document.getElementById('qr-url').textContent = qrRegUrl;
+  const qrImg = document.getElementById('qr-img');
+  if (qrImg) qrImg.src = `/api/qr?url=${encodeURIComponent(qrRegUrl)}`;
   await loadClaudeStats();
 }
+
+// ─── Onboarding QR ───────────────────────────────────────
+const OB_KEY = 'hg_onboarded';
+
+function checkOnboarding() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('register') === '1' && !localStorage.getItem(OB_KEY)) {
+    document.getElementById('page-onboarding').style.display = 'flex';
+    const tb = document.querySelector('.tabbar');
+    if (tb) tb.style.display = 'none';
+    document.getElementById('page-home').classList.remove('active');
+  }
+}
+
+async function submitOnboarding() {
+  const name = document.getElementById('ob-name').value.trim();
+  const device = document.getElementById('ob-device').value.trim();
+  const errEl = document.getElementById('ob-error');
+  const btn = document.getElementById('ob-btn');
+  if (!name) {
+    errEl.textContent = 'Por favor ingresa tu nombre.';
+    errEl.style.display = 'block';
+    return;
+  }
+  btn.disabled = true;
+  btn.textContent = 'Registrando...';
+  errEl.style.display = 'none';
+  try {
+    const res = await fetch(`${API}/api/presence/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ person_name: name, device_name: device || `Móvil de ${name}` })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      localStorage.setItem(OB_KEY, '1');
+      btn.textContent = data.already_registered
+        ? `Bienvenido de nuevo, ${data.person_name}`
+        : `Registrado — ${data.mac}`;
+      setTimeout(finishOnboarding, 1500);
+    } else {
+      errEl.textContent = data.error || 'Error al registrar. Verifica el WiFi del hogar.';
+      errEl.style.display = 'block';
+      btn.disabled = false;
+      btn.textContent = 'Registrar este dispositivo';
+    }
+  } catch(e) {
+    errEl.textContent = 'Sin conexión con el servidor.';
+    errEl.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = 'Registrar este dispositivo';
+  }
+}
+
+function skipOnboarding() {
+  localStorage.setItem(OB_KEY, 'skipped');
+  finishOnboarding();
+}
+
+function finishOnboarding() {
+  document.getElementById('page-onboarding').style.display = 'none';
+  const tb = document.querySelector('.tabbar');
+  if (tb) tb.style.display = '';
+  document.getElementById('page-home').classList.add('active');
+  const url = new URL(window.location);
+  url.searchParams.delete('register');
+  window.history.replaceState({}, '', url);
+}
+
+checkOnboarding();
 
 // ─── PWA Install ──────────────────────────────────────────
 window.addEventListener('beforeinstallprompt', e => {

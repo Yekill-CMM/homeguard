@@ -128,10 +128,13 @@ def create_app(db, port: int = 8000) -> FastAPI:
     # -------------------------------------------------------
 
     @app.get("/api/qr")
-    async def qr_code():
-        """Genera el QR que apunta a la app móvil en la LAN."""
-        ip = get_local_ip()
-        url = f"http://{ip}:{port}/install"
+    async def qr_code(url: str = ""):
+        """Genera el QR que apunta a la app móvil.
+        Si se pasa ?url=... usa esa URL, si no genera la URL local por defecto.
+        """
+        if not url:
+            ip = get_local_ip()
+            url = f"http://{ip}:{port}/mobile?register=1"
 
         qr = qrcode.QRCode(
             version=1,

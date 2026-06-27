@@ -140,6 +140,40 @@ class Device:
 # Escaneo de la LAN
 # ----------------------------------------------------------------------------
 
+def mac_from_ip(ip: str) -> str | None:
+    """Devuelve la MAC asociada a una IP consultando la tabla ARP del kernel.
+    Primero intenta ip neigh (instantáneo), luego arp-scan dirigido si no
+    encuentra resultado — el dispositivo acaba de hacer una petición HTTP
+    así que su entrada ARP debería estar fresca.
+    """
+    try:
+        out = subprocess.run(
+            ["ip", "neigh", "show", ip],
+            capture_output=True, text=True, timeout=5
+        )
+        for line in out.stdout.splitlines():
+            for token in line.split():
+                if MAC_RE.match(token):
+                    return token.upper()
+    except Exception as exc:
+        log.warning("ip neigh fallo para %s: %s", ip, exc)
+
+    # Fallback: arp-scan dirigido a la IP específica
+    try:
+        out = subprocess.run(
+            [ARP_SCAN_BIN, "--localnet", "--quiet", "--ignoredups", ip],
+            capture_output=True, text=True, timeout=10
+        )
+        for line in out.stdout.splitlines():
+            parts = line.split("\t")
+            if len(parts) >= 2 and MAC_RE.match(parts[1].strip()):
+                return parts[1].strip().upper()
+    except Exception as exc:
+        log.warning("arp-scan dirigido fallo para %s: %s", ip, exc)
+
+    return None
+
+
 def scan_lan_macs() -> set[str]:
     """Devuelve el set de MACs visibles en la LAN (mayúsculas).
 
@@ -445,7 +479,7 @@ if __name__ == "__main__":
 # ----------------------------------------------------------------------------
 
 def add_presence_routes(app, monitor: "PresenceMonitor") -> None:
-    from fastapi import Body
+    from fastapi import Body, Request
     from fastapi.responses import JSONResponse
 
     @app.get("/api/presence")
@@ -473,3 +507,56 @@ def add_presence_routes(app, monitor: "PresenceMonitor") -> None:
                 "ORDER BY pl.id DESC LIMIT ?", (limit,)
             ).fetchall()
         return [dict(r) for r in rows]
+
+    @app.post("/api/presence/register")
+    async def register_device(request: Request, payload: dict = Body(...)):
+        """Registra un dispositivo móvil detectando su MAC por IP de origen.
+        Payload: { person_name, device_name }
+        """
+        # IP real del cliente (detrás de Tailscale/proxy)
+        client_ip = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+        if not client_ip:
+            client_ip = request.client.host if request.client else ""
+
+        if not client_ip:
+            return JSONResponse(status_code=400,
+                content={"ok": False, "error": "No se pudo determinar la IP del dispositivo"})
+
+        person_name = payload.get("person_name", "").strip()
+        device_name = payload.get("device_name", "").strip()
+        if not person_name:
+            return JSONResponse(status_code=400,
+                content={"ok": False, "error": "Nombre requerido"})
+
+        # Resolver MAC desde la IP
+        mac = mac_from_ip(client_ip)
+        if not mac:
+            return JSONResponse(status_code=422, content={
+                "ok": False,
+                "error": "No se pudo obtener la MAC de este dispositivo. "
+                         "Asegúrate de estar conectado al WiFi del hogar.",
+                "ip": client_ip,
+            })
+
+        # Verificar si ya existe
+        with monitor._conn() as conn:
+            existing = conn.execute(
+                "SELECT id, person_name FROM presence_devices WHERE mac = ?",
+                (mac,)
+            ).fetchone()
+            if existing:
+                return {"ok": True, "already_registered": True,
+                        "person_name": existing["person_name"], "mac": mac}
+
+            conn.execute(
+                "INSERT INTO presence_devices "
+                "(person_name, device_name, mac, enabled, notify_arrival) "
+                "VALUES (?, ?, ?, 1, 1)",
+                (person_name, device_name or f"Móvil de {person_name}", mac)
+            )
+            conn.commit()
+
+        log.info("Dispositivo registrado via QR: %s (%s) MAC=%s IP=%s",
+                 person_name, device_name, mac, client_ip)
+        return {"ok": True, "already_registered": False,
+                "person_name": person_name, "mac": mac, "ip": client_ip}
