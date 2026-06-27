@@ -816,6 +816,33 @@ html, body {
           </div>
           <div class="setting-value" id="set-db">—</div>
         </div>
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label">Versión backend</div>
+            <div class="setting-desc">Commit en producción</div>
+          </div>
+          <div class="setting-value" id="set-version" style="font-family:monospace;font-size:12px">—</div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label">Versión app</div>
+            <div class="setting-desc">Service Worker cache</div>
+          </div>
+          <div class="setting-value" id="set-sw-version" style="font-family:monospace;font-size:12px">—</div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label">Formato de hora</div>
+            <div class="setting-desc">Reloj y eventos</div>
+          </div>
+          <div class="setting-value">
+            <select id="set-time-format" onchange="applyTimeFormat(this.value)"
+              style="font-size:13px;border:0.5px solid var(--border);border-radius:6px;padding:4px 8px;background:var(--surface-1);color:var(--text-primary)">
+              <option value="24">24 horas</option>
+              <option value="12">AM / PM</option>
+            </select>
+          </div>
+        </div>
       </div>
 
     </div>
