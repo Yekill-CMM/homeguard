@@ -1178,8 +1178,8 @@ async function loadSettings() {
 const OB_KEY = 'hg_onboarded';
 
 function checkOnboarding() {
-  const params = new URLSearchParams(window.location.search);
-  if (params.get('register') === '1' && !localStorage.getItem(OB_KEY)) {
+  // Mostrar onboarding en cualquier primer acceso, sin importar cómo llegó
+  if (!localStorage.getItem(OB_KEY)) {
     document.getElementById('page-onboarding').style.display = 'flex';
     const tb = document.querySelector('.tabbar');
     if (tb) tb.style.display = 'none';
@@ -1214,7 +1214,14 @@ async function submitOnboarding() {
         : `Registrado — ${data.mac}`;
       setTimeout(finishOnboarding, 1500);
     } else {
-      errEl.textContent = data.error || 'Error al registrar. Verifica el WiFi del hogar.';
+      // Si no pudo obtener MAC, probablemente está fuera de casa
+      const fueraRed = data.error && data.error.includes('MAC');
+      if (fueraRed) {
+        errEl.innerHTML = 'Para registrar tu dispositivo debes estar conectado al WiFi del hogar.<br>'
+          + '<small style="color:var(--text-muted)">Puedes usar la app normalmente desde cualquier lugar.</small>';
+      } else {
+        errEl.textContent = data.error || 'Error al registrar.';
+      }
       errEl.style.display = 'block';
       btn.disabled = false;
       btn.textContent = 'Registrar este dispositivo';
