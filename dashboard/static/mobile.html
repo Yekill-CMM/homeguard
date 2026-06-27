@@ -1167,10 +1167,16 @@ async function loadSettings() {
   } catch(e) {
     document.getElementById('set-status').textContent = '🔴 Sin conexión';
   }
-  const qrRegUrl = `${API}/mobile?register=1`;
-  document.getElementById('qr-url').textContent = qrRegUrl;
-  const qrImg = document.getElementById('qr-img');
-  if (qrImg) qrImg.src = `/api/qr?url=${encodeURIComponent(qrRegUrl)}`;
+  // QR siempre apunta a IP local — el onboarding requiere estar en la red del hogar
+  try {
+    const inst = await fetch(`${API}/api/install-url`).then(r => r.json());
+    const qrRegUrl = `${inst.mobile_url}?register=1`;
+    document.getElementById('qr-url').textContent = qrRegUrl;
+    const qrImg = document.getElementById('qr-img');
+    if (qrImg) qrImg.src = `/api/qr?url=${encodeURIComponent(qrRegUrl)}`;
+  } catch(e) {
+    document.getElementById('qr-url').textContent = 'Error al obtener URL local';
+  }
   await loadClaudeStats();
 }
 
