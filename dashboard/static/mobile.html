@@ -879,11 +879,24 @@ const LABELS = {
   no_threat:'Sin amenaza', unknown:'Sin clasificar'
 };
 
+// ─── Formato de hora ──────────────────────────────────────
+const TIME_FMT_KEY = 'hg_time_format';
+function getTimeFmt() { return localStorage.getItem(TIME_FMT_KEY) || '24'; }
+function applyTimeFormat(val) {
+  localStorage.setItem(TIME_FMT_KEY, val);
+  document.getElementById('set-time-format').value = val;
+  tick();
+}
+
 // ─── Reloj ────────────────────────────────────────────────
 function tick() {
   const now = new Date();
+  const h12 = getTimeFmt() === '12';
   document.getElementById('clock').textContent =
-    now.toLocaleTimeString('es-CL', { hour:'2-digit', minute:'2-digit' });
+    now.toLocaleTimeString('es-CL', {
+      hour: '2-digit', minute: '2-digit',
+      hour12: h12
+    });
 }
 setInterval(tick, 1000); tick();
 
@@ -907,7 +920,8 @@ function fmtTime(iso) {
   const today = new Date();
   const yesterday = new Date(); yesterday.setDate(today.getDate()-1);
   const sameDay = (a,b) => a.getDate()===b.getDate() && a.getMonth()===b.getMonth() && a.getFullYear()===b.getFullYear();
-  const timeStr = d.toLocaleTimeString('es-CL', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+  const h12 = getTimeFmt() === '12';
+  const timeStr = d.toLocaleTimeString('es-CL', { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12: h12 });
   if (sameDay(d, today)) return 'Hoy ' + timeStr;
   if (sameDay(d, yesterday)) return 'Ayer ' + timeStr;
   return d.toLocaleDateString('es-CL', { day:'2-digit', month:'short' }) + ' ' + timeStr;
@@ -1078,10 +1092,31 @@ async function loadAlerts() {
 // ─── Ajustes ──────────────────────────────────────────────
 async function loadSettings() {
   document.getElementById('set-host').textContent = window.location.hostname;
+  // Restaurar preferencia de formato de hora
+  document.getElementById('set-time-format').value = getTimeFmt();
+  // Versión del Service Worker (cache name)
+  if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+    const swUrl = navigator.serviceWorker.controller.scriptURL;
+    navigator.serviceWorker.controller.postMessage({ type: 'GET_CACHE_NAME' });
+  }
+  // Leer cache name desde el SW registrado
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    if (reg && reg.active) {
+      const channel = new MessageChannel();
+      channel.port1.onmessage = (e) => {
+        if (e.data && e.data.cacheName) {
+          document.getElementById('set-sw-version').textContent = e.data.cacheName;
+        }
+      };
+      reg.active.postMessage({ type: 'GET_CACHE_NAME' }, [channel.port2]);
+    }
+  } catch(e) {}
   try {
     const h = await fetch(`${API}/api/health`).then(r=>r.json());
     document.getElementById('set-status').textContent = h.status === 'online' ? '🟢 Online' : '🔴 Offline';
     document.getElementById('set-db').textContent = `${h.db_size_mb} MB`;
+    document.getElementById('set-version').textContent = h.version || '—';
   } catch(e) {
     document.getElementById('set-status').textContent = '🔴 Sin conexión';
   }

@@ -1,7 +1,7 @@
 // HomeGuard AI — Service Worker
 // Habilita: instalación PWA, cache offline, notificaciones push
 
-const CACHE = 'homeguard-v8';
+const CACHE = 'homeguard-v9';
 const OFFLINE_URLS = ['/mobile', '/static/manifest.json'];
 
 // ─── Instalación ─────────────────────────────────────────────
@@ -93,3 +93,9 @@ self.addEventListener('notificationclick', e => {
   );
 });
 
+// ─── Responde con el nombre del cache actual ──────────────
+self.addEventListener('message', e => {
+  if (e.data && e.data.type === 'GET_CACHE_NAME') {
+    e.ports[0].postMessage({ cacheName: CACHE });
+  }
+});
