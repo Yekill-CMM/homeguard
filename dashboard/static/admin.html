@@ -1311,25 +1311,8 @@ async function loadDevicesUnified() {
       }).join('');
     }
 
-    // -- Push sin persona asociada --
-    const unlinked = push.filter(p => !p.person_name);
-    if (unlinked.length) {
-      pushList.innerHTML = '<div style="font-size:12px;color:var(--muted);margin-bottom:8px">Push sin persona asignada:</div>' +
-        unlinked.map(d => `
-        <div class="item-card">
-          <div class="item-icon icon-user">📱</div>
-          <div class="item-info">
-            <div class="item-name">${d.device_name || 'iPhone'}</div>
-            <div class="item-detail">${d.device_id}</div>
-          </div>
-          <div class="item-actions">
-            <span class="badge badge-on">PUSH ACTIVO</span>
-            <button class="icon-btn danger" onclick="deleteItem('push/subscribe','${d.device_id}')">🗑</button>
-          </div>
-        </div>`).join('');
-    } else {
-      pushList.innerHTML = '';
-    }
+    // Push sin persona — limpiar silenciosamente
+    pushList.innerHTML = '';
 
   } catch(e) { presenceList.innerHTML = errorState(); }
 }
