@@ -18,6 +18,8 @@
     '<div id="hg-arm-home" style="font-size:11px;color:#9ca3af"></div>' +
     '<div id="hg-arm-btns" style="display:flex;gap:6px"></div>';
   document.body.appendChild(box);
+  // Ocultar durante onboarding
+  if (!localStorage.getItem('hg_onboarded')) { box.style.display = 'none'; }
 
   var btns = document.getElementById("hg-arm-btns");
   MODES.forEach(function (m) {
