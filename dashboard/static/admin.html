@@ -1256,57 +1256,92 @@ async function loadDevices() {
 }
 
 async function loadPresenceDevices() {
-  const list = document.getElementById('presence-list');
-  try {
-    const devs = await fetch(`${API}/api/presence/devices`).then(r=>r.json());
-    if (!devs.length) {
-      list.innerHTML = emptyState('📡','Sin dispositivos de presencia','Abre la app móvil desde cada teléfono para registrarlo');
-      return;
-    }
-    list.innerHTML = devs.map(d => {
-      const isHome = d.is_home;
-      const enabled = d.enabled;
-      const lastSeen = d.last_seen ? new Date(d.last_seen).toLocaleString('es-CL') : '—';
-      return `
-      <div class="item-card">
-        <div class="item-icon icon-user">${isHome ? '🏠' : '🌙'}</div>
-        <div class="item-info">
-          <div class="item-name">${d.person_name} — ${d.device_name}</div>
-          <div class="item-detail">${d.mac} · Última vez: ${lastSeen}</div>
-        </div>
-        <div class="item-actions">
-          <span class="badge ${isHome ? 'badge-on' : 'badge-off'}">${isHome ? 'EN CASA' : 'AUSENTE'}</span>
-          <span class="badge ${enabled ? 'badge-admin' : 'badge-off'}" style="cursor:pointer"
-            onclick="togglePresenceDevice(${d.id}, ${enabled})">${enabled ? 'ACTIVO' : 'INACTIVO'}</span>
-          <button class="icon-btn danger" onclick="deletePresenceDevice(${d.id}, '${d.person_name}')">🗑</button>
-        </div>
-      </div>`;
-    }).join('');
-  } catch(e) { list.innerHTML = errorState(); }
+  await loadDevicesUnified();
 }
 
 async function loadPushDevices() {
-  const list = document.getElementById('devices-list');
+  await loadDevicesUnified();
+}
+
+async function loadDevicesUnified() {
+  const presenceList = document.getElementById('presence-list');
+  const pushList = document.getElementById('devices-list');
   try {
-    const devs = await fetch(`${API}/api/push/devices`).then(r=>r.json());
-    document.getElementById('cnt-devices').textContent = devs.length;
-    if (!devs.length) {
-      list.innerHTML = emptyState('🔔','Sin dispositivos push','Activa las notificaciones desde la app móvil');
-      return;
+    const [presence, push] = await Promise.all([
+      fetch(`${API}/api/presence/devices`).then(r=>r.json()),
+      fetch(`${API}/api/push/devices`).then(r=>r.json()),
+    ]);
+
+    document.getElementById('cnt-devices').textContent = presence.length;
+
+    // -- Tabla unificada de presencia --
+    if (!presence.length) {
+      presenceList.innerHTML = emptyState('📡','Sin dispositivos registrados','Abre la app móvil desde cada teléfono para registrarlo');
+    } else {
+      // Indexar push por person_name para lookup rápido
+      const pushByPerson = {};
+      push.forEach(p => {
+        const key = (p.person_name || '').toLowerCase();
+        if (key) pushByPerson[key] = p;
+      });
+
+      presenceList.innerHTML = presence.map(d => {
+        const isHome = d.is_home;
+        const enabled = d.enabled;
+        const lastSeen = d.last_seen ? new Date(d.last_seen).toLocaleString('es-CL') : '—';
+        const pushDev = pushByPerson[d.person_name.toLowerCase()];
+        const hasPush = !!pushDev;
+        const pushBadge = hasPush
+          ? `<span class="badge badge-on" title="Push activo — ${pushDev.device_id}">🔔 PUSH</span>
+             <button class="icon-btn danger" title="Eliminar push" onclick="deletePushForPerson('${pushDev.device_id}','${d.person_name}')">🔕</button>`
+          : `<span class="badge badge-off">🔕 SIN PUSH</span>`;
+
+        return `
+        <div class="item-card">
+          <div class="item-icon icon-user" style="font-size:22px">${isHome ? '🏠' : '🌙'}</div>
+          <div class="item-info">
+            <div class="item-name">${d.person_name} <span style="font-weight:400;color:var(--muted);font-size:12px">· ${d.device_name}</span></div>
+            <div class="item-detail">${d.mac} · Visto: ${lastSeen}</div>
+          </div>
+          <div class="item-actions" style="flex-wrap:wrap;gap:6px">
+            <span class="badge ${isHome ? 'badge-on' : 'badge-off'}">${isHome ? 'EN CASA' : 'AUSENTE'}</span>
+            <span class="badge ${enabled ? 'badge-admin' : 'badge-off'}" style="cursor:pointer"
+              onclick="togglePresenceDevice(${d.id}, ${enabled})">${enabled ? 'HABILITADO' : 'DESHABILITADO'}</span>
+            ${pushBadge}
+            <button class="icon-btn danger" onclick="deletePresenceDevice(${d.id},'${d.person_name}')">🗑</button>
+          </div>
+        </div>`;
+      }).join('');
     }
-    list.innerHTML = devs.map(d => `
-      <div class="item-card">
-        <div class="item-icon icon-user">📱</div>
-        <div class="item-info">
-          <div class="item-name">${d.device_name}</div>
-          <div class="item-detail">${d.device_id}</div>
-        </div>
-        <div class="item-actions">
-          <span class="badge badge-on">ACTIVO</span>
-          <button class="icon-btn danger" onclick="deleteItem('push/subscribe','${d.device_id}')">🗑</button>
-        </div>
-      </div>`).join('');
-  } catch(e) { list.innerHTML = errorState(); }
+
+    // -- Push sin persona asociada --
+    const unlinked = push.filter(p => !p.person_name);
+    if (unlinked.length) {
+      pushList.innerHTML = '<div style="font-size:12px;color:var(--muted);margin-bottom:8px">Push sin persona asignada:</div>' +
+        unlinked.map(d => `
+        <div class="item-card">
+          <div class="item-icon icon-user">📱</div>
+          <div class="item-info">
+            <div class="item-name">${d.device_name || 'iPhone'}</div>
+            <div class="item-detail">${d.device_id}</div>
+          </div>
+          <div class="item-actions">
+            <span class="badge badge-on">PUSH ACTIVO</span>
+            <button class="icon-btn danger" onclick="deleteItem('push/subscribe','${d.device_id}')">🗑</button>
+          </div>
+        </div>`).join('');
+    } else {
+      pushList.innerHTML = '';
+    }
+
+  } catch(e) { presenceList.innerHTML = errorState(); }
+}
+
+async function deletePushForPerson(deviceId, personName) {
+  if (!confirm(`¿Desactivar push para ${personName}?`)) return;
+  await fetch(`${API}/api/push/subscribe/${deviceId}`, { method: 'DELETE' });
+  showSaved();
+  loadDevicesUnified();
 }
 
 async function deletePresenceDevice(id, name) {

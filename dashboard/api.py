@@ -250,6 +250,7 @@ def add_push_routes(app: FastAPI, notifier, vapid_manager):
     class SubscribeRequest(BaseModel):
         device_id: str
         device_name: str = "Dispositivo"
+        person_name: str = ""
         endpoint: str
         p256dh: str
         auth: str
@@ -271,6 +272,17 @@ def add_push_routes(app: FastAPI, notifier, vapid_manager):
             auth=req.auth,
             created_at=datetime.now().isoformat(),
         )
+        # Guardar person_name si viene en el request
+        if req.person_name:
+            try:
+                with notifier.db._connect() as conn:
+                    conn.execute(
+                        "UPDATE push_subscriptions SET person_name = ? WHERE device_id = ?",
+                        (req.person_name, req.device_id)
+                    )
+                    conn.commit()
+            except Exception:
+                pass
         ok = notifier.save_subscription(sub)
         return {"ok": ok, "devices": notifier.subscription_count()}
 
@@ -284,8 +296,12 @@ def add_push_routes(app: FastAPI, notifier, vapid_manager):
     async def devices():
         """Lista dispositivos suscritos."""
         subs = notifier.get_subscriptions()
-        return [{"device_id": s.device_id, "device_name": s.device_name,
-                 "created_at": s.created_at} for s in subs]
+        with notifier.db._connect() as conn:
+            rows = conn.execute(
+                "SELECT device_id, device_name, person_name, created_at, last_used "
+                "FROM push_subscriptions ORDER BY created_at"
+            ).fetchall()
+        return [dict(r) for r in rows]
 
     @app.post("/api/push/test")
     async def test_push():

@@ -1231,6 +1231,7 @@ async function submitOnboarding() {
     const data = await res.json();
     if (data.ok) {
       localStorage.setItem(OB_KEY, '1');
+      localStorage.setItem('hg_person_name', data.person_name || name);
       btn.textContent = data.already_registered
         ? `Bienvenido de nuevo, ${data.person_name}`
         : `Registrado — ${data.mac}`;
@@ -1328,12 +1329,15 @@ async function toggleNotifications(btn) {
     const subJson = sub.toJSON();
 
     // Registrar en el servidor
+    // Recuperar nombre de persona del localStorage (seteado en onboarding)
+    const personName = localStorage.getItem('hg_person_name') || '';
     const res = await fetch(`${API}/api/push/subscribe`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         device_id:   getDeviceId(),
         device_name: getDeviceName(),
+        person_name: personName,
         endpoint:    subJson.endpoint,
         p256dh:      subJson.keys.p256dh,
         auth:        subJson.keys.auth,
