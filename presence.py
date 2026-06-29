@@ -508,6 +508,26 @@ def add_presence_routes(app, monitor: "PresenceMonitor") -> None:
             ).fetchall()
         return [dict(r) for r in rows]
 
+    @app.get("/api/presence/check")
+    async def check_device(request: Request):
+        """Verifica si este dispositivo ya está registrado por su MAC/IP."""
+        client_ip = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+        if not client_ip:
+            client_ip = request.client.host if request.client else ""
+        if not client_ip:
+            return {"registered": False, "reason": "no_ip"}
+        mac = mac_from_ip(client_ip)
+        if not mac:
+            return {"registered": False, "reason": "no_mac", "ip": client_ip}
+        with monitor._conn() as conn:
+            row = conn.execute(
+                "SELECT person_name FROM presence_devices WHERE mac = ? AND enabled = 1",
+                (mac,)
+            ).fetchone()
+        if row:
+            return {"registered": True, "person_name": row["person_name"], "mac": mac}
+        return {"registered": False, "reason": "not_found", "mac": mac}
+
     @app.post("/api/presence/register")
     async def register_device(request: Request, payload: dict = Body(...)):
         """Registra un dispositivo móvil detectando su MAC por IP de origen.

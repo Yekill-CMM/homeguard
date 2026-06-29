@@ -1183,16 +1183,30 @@ async function loadSettings() {
 // ─── Onboarding QR ───────────────────────────────────────
 const OB_KEY = 'hg_onboarded';
 
-function checkOnboarding() {
-  // Mostrar onboarding en cualquier primer acceso, sin importar cómo llegó
-  if (!localStorage.getItem(OB_KEY)) {
-    document.getElementById('page-onboarding').style.display = 'flex';
-    const tb = document.querySelector('.tabbar');
-    if (tb) tb.style.display = 'none';
-    const widget = document.getElementById('hg-arm-widget');
-    if (widget) widget.style.display = 'none';
-    document.getElementById('page-home').classList.remove('active');
+async function checkOnboarding() {
+  // Si ya está marcado en localStorage, no mostrar onboarding
+  if (localStorage.getItem(OB_KEY)) return;
+
+  // Consultar al servidor si la MAC de este dispositivo ya está registrada
+  try {
+    const res = await fetch(`${API}/api/presence/check`);
+    const data = await res.json();
+    if (data.registered) {
+      // MAC ya registrada — marcar como onboarded y continuar
+      localStorage.setItem(OB_KEY, '1');
+      return;
+    }
+  } catch(e) {
+    // Sin conexión — mostrar onboarding igual
   }
+
+  // No registrado — mostrar pantalla de onboarding
+  document.getElementById('page-onboarding').style.display = 'flex';
+  const tb = document.querySelector('.tabbar');
+  if (tb) tb.style.display = 'none';
+  const widget = document.getElementById('hg-arm-widget');
+  if (widget) widget.style.display = 'none';
+  document.getElementById('page-home').classList.remove('active');
 }
 
 async function submitOnboarding() {
