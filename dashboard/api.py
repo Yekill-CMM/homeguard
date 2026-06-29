@@ -272,18 +272,37 @@ def add_push_routes(app: FastAPI, notifier, vapid_manager):
             auth=req.auth,
             created_at=datetime.now().isoformat(),
         )
-        # Guardar person_name si viene en el request
-        if req.person_name:
+        ok = notifier.save_subscription(sub)
+        # Resolver person_name: del payload, o desde presence_devices por MAC/IP
+        person_name = req.person_name
+        if not person_name:
+            try:
+                from presence import mac_from_ip
+                client_ip = request.headers.get("x-forwarded-for","").split(",")[0].strip()
+                if not client_ip:
+                    client_ip = request.client.host if request.client else ""
+                mac = mac_from_ip(client_ip) if client_ip else None
+                if mac:
+                    with notifier.db._connect() as conn:
+                        row = conn.execute(
+                            "SELECT person_name FROM presence_devices "
+                            "WHERE mac = ? COLLATE NOCASE AND enabled = 1",
+                            (mac,)
+                        ).fetchone()
+                        if row:
+                            person_name = row[0]
+            except Exception:
+                pass
+        if person_name:
             try:
                 with notifier.db._connect() as conn:
                     conn.execute(
                         "UPDATE push_subscriptions SET person_name = ? WHERE device_id = ?",
-                        (req.person_name, req.device_id)
+                        (person_name, req.device_id)
                     )
                     conn.commit()
             except Exception:
                 pass
-        ok = notifier.save_subscription(sub)
         return {"ok": ok, "devices": notifier.subscription_count()}
 
     @app.delete("/api/push/subscribe/{device_id}")
