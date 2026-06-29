@@ -509,11 +509,11 @@ def add_presence_routes(app, monitor: "PresenceMonitor") -> None:
         return [dict(r) for r in rows]
 
     @app.get("/api/presence/check")
-    async def check_device(request: Request):
+    async def check_device(req: Request):
         """Verifica si este dispositivo ya está registrado por su MAC/IP."""
-        client_ip = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+        client_ip = req.headers.get("x-forwarded-for", "").split(",")[0].strip()
         if not client_ip:
-            client_ip = request.client.host if request.client else ""
+            client_ip = req.client.host if req.client else ""
         if not client_ip:
             return {"registered": False, "reason": "no_ip"}
         mac = mac_from_ip(client_ip)
