@@ -509,6 +509,50 @@ def add_presence_routes(app, monitor: "PresenceMonitor") -> None:
             ).fetchall()
         return [dict(r) for r in rows]
 
+    @app.get("/api/presence/devices")
+    async def list_presence_devices():
+        """Lista todos los dispositivos de presencia."""
+        with monitor._conn() as conn:
+            rows = conn.execute(
+                "SELECT id, person_name, device_name, mac, is_home, "
+                "last_seen, last_arrival, last_departure, enabled "
+                "FROM presence_devices ORDER BY person_name"
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    @app.delete("/api/presence/devices/{device_id}")
+    async def delete_presence_device(device_id: int):
+        """Elimina un dispositivo de presencia."""
+        with monitor._conn() as conn:
+            row = conn.execute(
+                "SELECT id FROM presence_devices WHERE id = ?", (device_id,)
+            ).fetchone()
+            if not row:
+                from fastapi.responses import JSONResponse
+                return JSONResponse(status_code=404,
+                    content={"ok": False, "error": "Dispositivo no encontrado"})
+            conn.execute("DELETE FROM presence_log WHERE device_id = ?", (device_id,))
+            conn.execute("DELETE FROM presence_devices WHERE id = ?", (device_id,))
+            conn.commit()
+        log.info("Dispositivo de presencia eliminado: id=%s", device_id)
+        return {"ok": True}
+
+    @app.patch("/api/presence/devices/{device_id}")
+    async def update_presence_device(device_id: int, payload: dict = Body(...)):
+        """Actualiza nombre o estado habilitado de un dispositivo."""
+        allowed = {"person_name", "device_name", "enabled"}
+        updates = {k: v for k, v in payload.items() if k in allowed}
+        if not updates:
+            from fastapi.responses import JSONResponse
+            return JSONResponse(status_code=400,
+                content={"ok": False, "error": "Sin campos válidos para actualizar"})
+        sets = ", ".join(f"{k} = ?" for k in updates)
+        vals = list(updates.values()) + [device_id]
+        with monitor._conn() as conn:
+            conn.execute(f"UPDATE presence_devices SET {sets} WHERE id = ?", vals)
+            conn.commit()
+        return {"ok": True}
+
     @app.get("/api/presence/check")
     async def check_device(req: FastAPIRequest):
         """Verifica si este dispositivo ya está registrado por su MAC/IP."""

@@ -785,9 +785,15 @@ header {
       <div class="page-header">
         <div>
           <div class="page-title">DISPOSITIVOS MÓVILES</div>
-          <div class="page-desc">Teléfonos con notificaciones push activas</div>
+          <div class="page-desc">Presencia WiFi y notificaciones push</div>
         </div>
+        <button class="btn-ghost" onclick="loadDevices()" style="font-size:13px;padding:9px 16px">↻ Actualizar</button>
       </div>
+
+      <div style="font-family:var(--mono);font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:12px">PRESENCIA WIFI</div>
+      <div class="items-grid" id="presence-list"></div>
+
+      <div style="font-family:var(--mono);font-size:10px;letter-spacing:2px;color:var(--muted);margin:24px 0 12px">NOTIFICACIONES PUSH</div>
       <div class="items-grid" id="devices-list"></div>
     </div>
 
@@ -1246,11 +1252,48 @@ async function loadUsers() {
 
 // ─── Dispositivos ──────────────────────────────────────────
 async function loadDevices() {
+  await Promise.all([loadPresenceDevices(), loadPushDevices()]);
+}
+
+async function loadPresenceDevices() {
+  const list = document.getElementById('presence-list');
+  try {
+    const devs = await fetch(`${API}/api/presence/devices`).then(r=>r.json());
+    if (!devs.length) {
+      list.innerHTML = emptyState('📡','Sin dispositivos de presencia','Abre la app móvil desde cada teléfono para registrarlo');
+      return;
+    }
+    list.innerHTML = devs.map(d => {
+      const isHome = d.is_home;
+      const enabled = d.enabled;
+      const lastSeen = d.last_seen ? new Date(d.last_seen).toLocaleString('es-CL') : '—';
+      return `
+      <div class="item-card">
+        <div class="item-icon icon-user">${isHome ? '🏠' : '🌙'}</div>
+        <div class="item-info">
+          <div class="item-name">${d.person_name} — ${d.device_name}</div>
+          <div class="item-detail">${d.mac} · Última vez: ${lastSeen}</div>
+        </div>
+        <div class="item-actions">
+          <span class="badge ${isHome ? 'badge-on' : 'badge-off'}">${isHome ? 'EN CASA' : 'AUSENTE'}</span>
+          <span class="badge ${enabled ? 'badge-admin' : 'badge-off'}" style="cursor:pointer"
+            onclick="togglePresenceDevice(${d.id}, ${enabled})">${enabled ? 'ACTIVO' : 'INACTIVO'}</span>
+          <button class="icon-btn danger" onclick="deletePresenceDevice(${d.id}, '${d.person_name}')">🗑</button>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) { list.innerHTML = errorState(); }
+}
+
+async function loadPushDevices() {
   const list = document.getElementById('devices-list');
   try {
     const devs = await fetch(`${API}/api/push/devices`).then(r=>r.json());
     document.getElementById('cnt-devices').textContent = devs.length;
-    if (!devs.length) { list.innerHTML = emptyState('📱','Sin dispositivos registrados','Escanea el QR desde la app móvil y activa las notificaciones'); return; }
+    if (!devs.length) {
+      list.innerHTML = emptyState('🔔','Sin dispositivos push','Activa las notificaciones desde la app móvil');
+      return;
+    }
     list.innerHTML = devs.map(d => `
       <div class="item-card">
         <div class="item-icon icon-user">📱</div>
@@ -1264,6 +1307,24 @@ async function loadDevices() {
         </div>
       </div>`).join('');
   } catch(e) { list.innerHTML = errorState(); }
+}
+
+async function deletePresenceDevice(id, name) {
+  if (!confirm(`¿Eliminar el dispositivo de ${name}?\nSe borrará su historial de presencia.`)) return;
+  const r = await fetch(`${API}/api/presence/devices/${id}`, { method: 'DELETE' });
+  const d = await r.json();
+  if (d.ok) { showSaved(); loadDevices(); }
+  else alert('Error: ' + (d.error || 'desconocido'));
+}
+
+async function togglePresenceDevice(id, currentEnabled) {
+  const r = await fetch(`${API}/api/presence/devices/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled: currentEnabled ? 0 : 1 })
+  });
+  const d = await r.json();
+  if (d.ok) { loadPresenceDevices(); }
 }
 
 // ─── Delete genérico ───────────────────────────────────────
