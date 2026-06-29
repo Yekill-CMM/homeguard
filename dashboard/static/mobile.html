@@ -1273,7 +1273,7 @@ function finishOnboarding() {
   window.history.replaceState({}, '', url);
 }
 
-checkOnboarding();
+(async () => { await checkOnboarding(); })()
 
 // ─── PWA Install ──────────────────────────────────────────
 window.addEventListener('beforeinstallprompt', e => {
