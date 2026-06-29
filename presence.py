@@ -43,6 +43,7 @@ import subprocess
 import threading
 import time
 from dataclasses import dataclass
+from fastapi import Request as FastAPIRequest
 from datetime import datetime, timedelta
 from typing import Callable, Optional
 
@@ -509,7 +510,7 @@ def add_presence_routes(app, monitor: "PresenceMonitor") -> None:
         return [dict(r) for r in rows]
 
     @app.get("/api/presence/check")
-    async def check_device(req: Request):
+    async def check_device(req: FastAPIRequest):
         """Verifica si este dispositivo ya está registrado por su MAC/IP."""
         client_ip = req.headers.get("x-forwarded-for", "").split(",")[0].strip()
         if not client_ip:
