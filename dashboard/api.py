@@ -6,7 +6,8 @@ import io
 import socket
 import logging
 import qrcode
-from fastapi import FastAPI, Query
+from fastapi import FastAPI
+from fastapi import Request as FastAPIRequest, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -261,7 +262,7 @@ def add_push_routes(app: FastAPI, notifier, vapid_manager):
         return {"public_key": vapid_manager.public_key}
 
     @app.post("/api/push/subscribe")
-    async def subscribe(req: SubscribeRequest):
+    async def subscribe(req: SubscribeRequest, request: FastAPIRequest):
         """Registra un dispositivo para recibir notificaciones push."""
         from datetime import datetime
         sub = PushSubscription(
