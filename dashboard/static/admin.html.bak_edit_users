@@ -1291,20 +1291,11 @@ async function loadUsers() {
           <div class="item-detail">Creado: ${new Date(u.created_at).toLocaleDateString('es-CL')}</div>
         </div>
         <div class="item-actions">
-          <span class="badge ${u.role==='admin'?'badge-admin':u.role==='tech'?'badge-armed':'badge-rtsp'}">${u.role.toUpperCase()}</span>
-          <button class="icon-btn" onclick="editUser('${u.id}')">✏️</button>
+          <span class="badge ${u.role==='admin'?'badge-admin':'badge-rtsp'}">${u.role.toUpperCase()}</span>
           <button class="icon-btn danger" onclick="deleteItem('users','${u.id}')">🗑</button>
         </div>
       </div>`).join('');
   } catch(e) { list.innerHTML = errorState(); }
-}
-
-async function editUser(id) {
-  const users = await fetch(`${API}/api/admin/users`).then(r=>r.json());
-  const u = users.find(u=>u.id===id);
-  if (!u) return;
-  editingId = id;
-  openModal('user', u);
 }
 
 // ─── Dispositivos ──────────────────────────────────────────
@@ -1519,7 +1510,7 @@ const FORMS = {
   }),
 
   user: (data={}) => ({
-    title: data.id ? 'EDITAR USUARIO' : 'NUEVO USUARIO',
+    title: 'NUEVO USUARIO',
     html: `
       <div class="form-group">
         <label class="form-label">Nombre completo</label>
@@ -1529,14 +1520,13 @@ const FORMS = {
         <div class="form-group">
           <label class="form-label">Rol</label>
           <select class="form-select" id="f-role">
-            <option value="admin" ${data.role==='admin'?'selected':''}>Administrador</option>
-            <option value="family" ${data.role==='family'?'selected':''}>Familia</option>
-            <option value="tech" ${data.role==='tech'?'selected':''}>Técnico</option>
+            <option value="admin">Administrador</option>
+            <option value="viewer">Visualizador</option>
           </select>
         </div>
         <div class="form-group">
-          <label class="form-label">PIN${data.id?' (dejar vacío para no cambiar)':' de acceso'}</label>
-          <input class="form-input" id="f-pin" type="password" placeholder="6 dígitos" maxlength="6">
+          <label class="form-label">PIN de acceso (opcional)</label>
+          <input class="form-input" id="f-pin" type="password" placeholder="4–6 dígitos" maxlength="6">
         </div>
       </div>`,
   }),
@@ -1604,9 +1594,7 @@ async function saveModal() {
 
   } else if (currentModal === 'user') {
     body = { name: v('f-name'), role: v('f-role'), pin: v('f-pin')||null };
-    url = editingId
-      ? `${API}/api/admin/users/${editingId}`
-      : `${API}/api/admin/users`;
+    url = `${API}/api/admin/users`;
   }
 
   if (!body.name) { alert('El nombre es obligatorio'); return; }

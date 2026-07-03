@@ -686,6 +686,24 @@ def add_admin_routes(app: FastAPI, db, core=None):
             conn.commit()
         return {"ok": True, "id": uid}
 
+    @app.put("/api/admin/users/{uid}")
+    async def admin_update_user(uid: str, u: UserCreate):
+        import hashlib
+        with db._connect() as conn:
+            if u.pin:
+                pin_hash = hashlib.sha256(u.pin.encode()).hexdigest()
+                conn.execute(
+                    "UPDATE users SET name=?, role=?, pin_hash=?, pin_expiry=? WHERE id=?",
+                    (u.name, u.role, pin_hash, u.pin_expiry, uid)
+                )
+            else:
+                conn.execute(
+                    "UPDATE users SET name=?, role=?, pin_expiry=? WHERE id=?",
+                    (u.name, u.role, u.pin_expiry, uid)
+                )
+            conn.commit()
+        return {"ok": True}
+
     @app.delete("/api/admin/users/{uid}")
     async def admin_delete_user(uid: str):
         with db._connect() as conn:
