@@ -172,23 +172,6 @@ async def main():
         )).serve()
     )
     asyncio.create_task(_daily_snapshot_cleanup(core.db))
-
-    import hashlib as _hl, os as _os
-    _default_pin = _os.environ.get("ADMIN_PIN", "123456")
-    with core.db._connect() as _conn:
-        for _col in ["ALTER TABLE users ADD COLUMN token TEXT",
-                     "ALTER TABLE users ADD COLUMN pin_expiry TEXT",
-                     "ALTER TABLE users ADD COLUMN last_login TEXT"]:
-            try: _conn.execute(_col)
-            except Exception: pass
-        _n = _conn.execute("SELECT COUNT(*) FROM users WHERE role='admin'").fetchone()[0]
-        if _n == 0:
-            _conn.execute("""INSERT INTO users (id, name, role, pin_hash, created_at)
-                VALUES ('usr_admin', 'Administrador', 'admin', ?, datetime('now'))""",
-                (_hl.sha256(_default_pin.encode()).hexdigest(),))
-            _conn.commit()
-            logger.info(f"[Auth] Admin creado — PIN: {_default_pin}")
-            logger.warning("[Auth] Cambia el PIN admin desde el dashboard")
     logger.info(f"Dashboard disponible en http://localhost:{config.api_port}")
 
     def shutdown(sig, frame):

@@ -401,8 +401,9 @@ def add_admin_routes(app: FastAPI, db, core=None):
     class UserCreate(BaseModel):
         id: Optional[str] = None
         name: str
-        role: str = "viewer"   # admin | viewer
+        role: str = "family"   # admin | family | tech
         pin: Optional[str] = None
+        pin_expiry: Optional[str] = None
 
     class ZoneCreate(BaseModel):
         id: Optional[str] = None
@@ -429,10 +430,14 @@ def add_admin_routes(app: FastAPI, db, core=None):
                 CREATE TABLE IF NOT EXISTS users (
                     id          TEXT PRIMARY KEY,
                     name        TEXT NOT NULL,
-                    role        TEXT DEFAULT 'viewer',
+                    role        TEXT DEFAULT 'family',
                     pin_hash    TEXT,
+                    token       TEXT,
+                    pin_expiry  TEXT,
+                    last_login  TEXT,
                     created_at  TEXT NOT NULL
                 );
+                CREATE INDEX IF NOT EXISTS idx_users_token ON users(token);
 
                 CREATE TABLE IF NOT EXISTS zones (
                     id          TEXT PRIMARY KEY,
@@ -602,6 +607,58 @@ def add_admin_routes(app: FastAPI, db, core=None):
 
     # ── USUARIOS ─────────────────────────────────────────────
 
+
+    # ── AUTENTICACIÓN ────────────────────────────────────────
+    from fastapi import Header, HTTPException
+    import hashlib as _hl, uuid as _uuid
+
+    def _get_user_by_token(token: str):
+        if not token: return None
+        with db._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM users WHERE token=? AND (pin_expiry IS NULL OR pin_expiry > datetime('now'))",
+                (token,)
+            ).fetchone()
+        return dict(row) if row else None
+
+    class PinLogin(BaseModel):
+        pin: str
+
+    @app.post("/api/auth/login")
+    async def auth_login(body: PinLogin):
+        pin_hash = _hl.sha256(body.pin.encode()).hexdigest()
+        with db._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM users WHERE pin_hash=? AND (pin_expiry IS NULL OR pin_expiry > datetime('now'))",
+                (pin_hash,)
+            ).fetchone()
+        if not row:
+            raise HTTPException(status_code=401, detail="PIN incorrecto")
+        user = dict(row)
+        token = str(_uuid.uuid4()).replace("-", "")
+        with db._connect() as conn:
+            conn.execute("UPDATE users SET token=?, last_login=datetime('now') WHERE id=?",
+                         (token, user["id"]))
+            conn.commit()
+        return {"ok": True, "token": token,
+                "user": {"id": user["id"], "name": user["name"], "role": user["role"]}}
+
+    @app.post("/api/auth/logout")
+    async def auth_logout(authorization: str = Header(None)):
+        token = authorization[7:] if authorization and authorization.startswith("Bearer ") else None
+        if token:
+            with db._connect() as conn:
+                conn.execute("UPDATE users SET token=NULL WHERE token=?", (token,))
+                conn.commit()
+        return {"ok": True}
+
+    @app.get("/api/auth/me")
+    async def auth_me(authorization: str = Header(None)):
+        token = authorization[7:] if authorization and authorization.startswith("Bearer ") else None
+        user = _get_user_by_token(token) if token else None
+        if not user: raise HTTPException(status_code=401, detail="No autenticado")
+        return {"id": user["id"], "name": user["name"], "role": user["role"]}
+
     @app.get("/api/admin/users")
     async def admin_get_users():
         with db._connect() as conn:
@@ -616,10 +673,16 @@ def add_admin_routes(app: FastAPI, db, core=None):
         uid = u.id or new_id("usr")
         pin_hash = hashlib.sha256(u.pin.encode()).hexdigest() if u.pin else None
         with db._connect() as conn:
+            for col in ["ALTER TABLE users ADD COLUMN token TEXT",
+                        "ALTER TABLE users ADD COLUMN pin_expiry TEXT",
+                        "ALTER TABLE users ADD COLUMN last_login TEXT"]:
+                try: conn.execute(col)
+                except Exception: pass
             conn.execute("""
-                INSERT OR REPLACE INTO users (id, name, role, pin_hash, created_at)
-                VALUES (?,?,?,?,?)
-            """, (uid, u.name, u.role, pin_hash, now()))
+                INSERT OR REPLACE INTO users
+                    (id, name, role, pin_hash, pin_expiry, created_at)
+                VALUES (?,?,?,?,?,?)
+            """, (uid, u.name, u.role, pin_hash, u.pin_expiry, now()))
             conn.commit()
         return {"ok": True, "id": uid}
 
