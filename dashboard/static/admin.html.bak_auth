@@ -30,30 +30,6 @@
   --mono:     'JetBrains Mono', monospace;
 }
 
-
-/* ─── PIN Overlay ───────────────────────────────────────── */
-#pin-overlay {
-  position: fixed; inset: 0; z-index: 9999;
-  background: #07090e;
-  display: flex; flex-direction: column;
-  align-items: center; justify-content: center;
-  gap: 24px; padding: 32px 24px;
-}
-#pin-overlay.hidden { display: none; }
-.pin-logo { font-family: var(--orb); font-size: 12px; color: var(--accent); letter-spacing: 4px; text-transform: uppercase; }
-.pin-title { font-family: var(--orb); font-size: 20px; color: var(--text); text-align: center; }
-.pin-subtitle { font-family: var(--sans); font-size: 13px; color: var(--muted); text-align: center; margin-top: -12px; }
-.pin-dots { display: flex; gap: 14px; margin: 8px 0; }
-.pin-dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--border); background: transparent; transition: all .2s; }
-.pin-dot.filled { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 8px var(--accent); }
-.pin-dot.error  { background: var(--red); border-color: var(--red); }
-.pin-error { font-size: 12px; color: var(--red); min-height: 18px; text-align: center; }
-.pin-keypad { display: grid; grid-template-columns: repeat(3, 72px); gap: 12px; }
-.pin-key { height: 72px; border-radius: 12px; background: var(--s2); border: 1px solid var(--border); color: var(--text); font-family: var(--sans); font-size: 22px; font-weight: 600; cursor: pointer; transition: all .15s; -webkit-tap-highlight-color: transparent; display: flex; align-items: center; justify-content: center; }
-.pin-key:active { background: var(--accent); color: #000; transform: scale(.95); }
-.pin-key.del { font-size: 18px; color: var(--muted); }
-.pin-key.empty { background: transparent; border: none; cursor: default; }
-
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
@@ -1105,33 +1081,6 @@ header {
       <button class="btn-ghost" onclick="closeModal()">Cancelar</button>
       <button class="btn-primary" onclick="saveModal()">Guardar</button>
     </div>
-  </div>
-</div>
-
-
-<div id="pin-overlay">
-  <div class="pin-logo">HomeGuard AI</div>
-  <div class="pin-title">Acceso al sistema</div>
-  <div class="pin-subtitle">Ingresa tu PIN de 6 dígitos</div>
-  <div class="pin-dots">
-    <div class="pin-dot" id="pd0"></div><div class="pin-dot" id="pd1"></div>
-    <div class="pin-dot" id="pd2"></div><div class="pin-dot" id="pd3"></div>
-    <div class="pin-dot" id="pd4"></div><div class="pin-dot" id="pd5"></div>
-  </div>
-  <div class="pin-error" id="pin-error"></div>
-  <div class="pin-keypad">
-    <button class="pin-key" onclick="pinKey('1')">1</button>
-    <button class="pin-key" onclick="pinKey('2')">2</button>
-    <button class="pin-key" onclick="pinKey('3')">3</button>
-    <button class="pin-key" onclick="pinKey('4')">4</button>
-    <button class="pin-key" onclick="pinKey('5')">5</button>
-    <button class="pin-key" onclick="pinKey('6')">6</button>
-    <button class="pin-key" onclick="pinKey('7')">7</button>
-    <button class="pin-key" onclick="pinKey('8')">8</button>
-    <button class="pin-key" onclick="pinKey('9')">9</button>
-    <div class="pin-key empty"></div>
-    <button class="pin-key" onclick="pinKey('0')">0</button>
-    <button class="pin-key del" onclick="pinDel()">&#9003;</button>
   </div>
 </div>
 
@@ -2586,71 +2535,5 @@ function showToast(msg, duration=3000) {
   </div>
 </div>
 
-<script>
-
-// ─── Auth PIN (admin) ─────────────────────────────────────
-const HG_TOKEN_KEY = 'hg_auth_token_admin';
-const HG_USER_KEY  = 'hg_auth_user_admin';
-const ALLOWED_ROLES_AUTH = ['admin', 'tech'];
-let _pinBuffer = '';
-let _hgUser = null;
-function pinKey(d) {
-  if (_pinBuffer.length >= 6) return;
-  _pinBuffer += d; _updateDots();
-  if (_pinBuffer.length === 6) setTimeout(_pinSubmit, 120);
-}
-function pinDel() {
-  _pinBuffer = _pinBuffer.slice(0,-1);
-  document.getElementById('pin-error').textContent = '';
-  _updateDots();
-}
-function _updateDots() {
-  for (let i=0;i<6;i++) {
-    const d=document.getElementById('pd'+i);
-    d.classList.toggle('filled', i<_pinBuffer.length);
-    d.classList.remove('error');
-  }
-}
-async function _pinSubmit() {
-  try {
-    const r=await fetch(API+'/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin:_pinBuffer})});
-    const data=await r.json();
-    if(r.ok && data.token){
-      if(!ALLOWED_ROLES_AUTH.includes(data.user.role)){_pinError('Acceso solo para administradores');return;}
-      localStorage.setItem(HG_TOKEN_KEY,data.token);
-      localStorage.setItem(HG_USER_KEY,JSON.stringify(data.user));
-      _hgUser=data.user;
-      document.getElementById('pin-overlay').classList.add('hidden');
-    } else { _pinError('PIN incorrecto'); }
-  } catch(e){ _pinError('Error de conexión'); }
-}
-function _pinError(msg) {
-  _pinBuffer='';
-  document.getElementById('pin-error').textContent=msg;
-  for(let i=0;i<6;i++){const d=document.getElementById('pd'+i);d.classList.remove('filled');d.classList.add('error');}
-  setTimeout(()=>{for(let i=0;i<6;i++)document.getElementById('pd'+i).classList.remove('error');},800);
-}
-function hgAuthHeader() {
-  const t=localStorage.getItem(HG_TOKEN_KEY);
-  return t?{'Authorization':'Bearer '+t}:{};
-}
-function hgLogout() {
-  const t=localStorage.getItem(HG_TOKEN_KEY);
-  if(t) fetch(API+'/api/auth/logout',{method:'POST',headers:{'Authorization':'Bearer '+t}});
-  localStorage.removeItem(HG_TOKEN_KEY);localStorage.removeItem(HG_USER_KEY);location.reload();
-}
-async function _checkExistingToken() {
-  const t=localStorage.getItem(HG_TOKEN_KEY);
-  if(!t){document.getElementById('pin-overlay').classList.remove('hidden');return;}
-  try {
-    const r=await fetch(API+'/api/auth/me',{headers:{'Authorization':'Bearer '+t}});
-    if(r.ok){const u=await r.json();if(ALLOWED_ROLES_AUTH.includes(u.role)){_hgUser=u;document.getElementById('pin-overlay').classList.add('hidden');return;}}
-  } catch(e){}
-  localStorage.removeItem(HG_TOKEN_KEY);
-  document.getElementById('pin-overlay').classList.remove('hidden');
-}
-document.addEventListener('DOMContentLoaded', _checkExistingToken);
-
-</script>
 </body>
 </html>
