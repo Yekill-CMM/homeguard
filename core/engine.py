@@ -379,6 +379,18 @@ class HomeGuardCore:
         except Exception as e:
             logger.error(f"Error en análisis Claude: {e}")
 
+    def _parse_claude_response(self, raw: str) -> Optional[dict]:
+        """Parsea la respuesta JSON de Claude."""
+        try:
+            clean = raw.strip()
+            if clean.startswith("```"):
+                lines = clean.split("\n")
+                clean = "\n".join(lines[1:-1])
+            return json.loads(clean)
+        except json.JSONDecodeError as e:
+            logger.error(f"No se pudo parsear respuesta JSON de Claude: {e}\nRespuesta: {raw}")
+            return None
+
     async def _evaluate_alert(self, event: SecurityEvent):
         """Decide si hay que disparar una alerta y por qué canal.
 
