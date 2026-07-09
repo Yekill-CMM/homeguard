@@ -1978,7 +1978,7 @@ async function loadHealthLog() {
 // ─── Claude Vision ─────────────────────────────────────────
 async function loadClaudeAdmin() {
   try {
-    const data = await fetch(`${API}/api/claude/config`).then(r => r.json());
+    const data = await fetch(`${API}/api/claude/config`, {headers: hgAuthHeader()}).then(r => r.json());
     const s    = data.stats  || {};
     const td   = s.today     || {};
     const mn   = s.month     || {};
@@ -2105,7 +2105,7 @@ async function saveLimitsAdmin() {
   try {
     const res  = await fetch(`${API}/api/claude/limits`, {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+      headers: {'Content-Type': 'application/json', ...hgAuthHeader()},
       body: JSON.stringify({
         daily_limit:        parseInt(daily),
         event_dedup_s:      parseInt(dedup),
@@ -2132,7 +2132,7 @@ async function toggleClaudeAdmin(btn) {
   try {
     await fetch(`${API}/api/claude/config`, {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+      headers: {'Content-Type': 'application/json', ...hgAuthHeader()},
       body: JSON.stringify({enabled}),
     });
   } catch(e) {
@@ -2151,7 +2151,7 @@ async function saveClaudeKey() {
   try {
     const res  = await fetch(`${API}/api/claude/config`, {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+      headers: {'Content-Type': 'application/json', ...hgAuthHeader()},
       body: JSON.stringify({api_key: key}),
     });
     const data = await res.json();
@@ -2646,6 +2646,16 @@ function hgAuthHeader() {
   const t=localStorage.getItem(HG_TOKEN_KEY);
   return t?{'Authorization':'Bearer '+t}:{};
 }
+// Adjunta el Bearer token a todo fetch same-origin. Las rutas públicas
+// (login, push/subscribe, presence/check|register) ignoran el header extra.
+(function(){
+  const _origFetch = window.fetch.bind(window);
+  window.fetch = function(input, init){
+    init = init || {};
+    init.headers = {...(init.headers||{}), ...hgAuthHeader()};
+    return _origFetch(input, init);
+  };
+})();
 function hgLogout() {
   const t=localStorage.getItem(HG_TOKEN_KEY);
   if(t) fetch(API+'/api/auth/logout',{method:'POST',headers:{'Authorization':'Bearer '+t}});

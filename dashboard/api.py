@@ -6,7 +6,7 @@ import io
 import socket
 import logging
 import qrcode
-from fastapi import FastAPI
+from fastapi import FastAPI, Header, HTTPException, Depends
 from fastapi import Request as FastAPIRequest, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
@@ -16,6 +16,37 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 _db = None
+
+
+def _get_user_by_token(token: str):
+    """Busca un usuario por su token de sesión (Bearer). Usa el _db global,
+    compartido por todas las funciones add_*_routes de este módulo."""
+    if not token:
+        return None
+    with _db._connect() as conn:
+        row = conn.execute(
+            "SELECT * FROM users WHERE token=? AND (pin_expiry IS NULL OR pin_expiry > datetime('now'))",
+            (token,)
+        ).fetchone()
+    return dict(row) if row else None
+
+
+async def require_auth(authorization: str = Header(None)) -> dict:
+    """Dependency: exige un Bearer token válido. Usar en rutas que requieren sesión."""
+    token = authorization[7:] if authorization and authorization.startswith("Bearer ") else None
+    user = _get_user_by_token(token) if token else None
+    if not user:
+        raise HTTPException(status_code=401, detail="No autenticado")
+    return user
+
+
+def require_role(*roles: str):
+    """Dependency factory: exige sesión válida Y rol dentro de `roles`."""
+    async def _dep(user: dict = Depends(require_auth)) -> dict:
+        if user["role"] not in roles:
+            raise HTTPException(status_code=403, detail="Permiso insuficiente")
+        return user
+    return _dep
 
 
 def get_local_ip() -> str:
@@ -166,7 +197,7 @@ def create_app(db, port: int = 8000) -> FastAPI:
     # -------------------------------------------------------
 
     @app.get("/api/summary")
-    async def summary():
+    async def summary(user: dict = Depends(require_auth)):
         return _db.get_summary()
 
     @app.get("/api/events")
@@ -180,6 +211,7 @@ def create_app(db, port: int = 8000) -> FastAPI:
         hours: int = Query(default=24, le=168),
         limit: int = Query(default=50, le=200),
         offset: int = 0,
+        user: dict = Depends(require_auth),
     ):
         return _db.get_events(
             camera_id=camera_id, event_type=event_type,
@@ -189,27 +221,33 @@ def create_app(db, port: int = 8000) -> FastAPI:
         )
 
     @app.get("/api/alerts")
-    async def alerts(limit: int = Query(default=20, le=100)):
+    async def alerts(limit: int = Query(default=20, le=100), user: dict = Depends(require_auth)):
         return _db.get_recent_alerts(limit=limit)
 
     @app.get("/api/stats")
-    async def stats(days: int = Query(default=7, le=30)):
+    async def stats(days: int = Query(default=7, le=30), user: dict = Depends(require_auth)):
         return _db.get_daily_stats(days=days)
 
     @app.get("/api/cameras")
-    async def cameras():
+    async def cameras(user: dict = Depends(require_auth)):
         return _db.get_cameras()
 
     @app.get("/api/events/{event_id}")
-    async def event_detail(event_id: str):
+    async def event_detail(event_id: str, user: dict = Depends(require_auth)):
         event = _db.get_event(event_id)
         if not event:
             return JSONResponse(status_code=404, content={"error": "No encontrado"})
         return event
 
     @app.get("/api/events/{event_id}/snapshot")
-    async def event_snapshot(event_id: str):
-        """Sirve el snapshot JPEG de un evento."""
+    async def event_snapshot(event_id: str, token: Optional[str] = None,
+                              authorization: str = Header(None)):
+        """Sirve el snapshot JPEG de un evento.
+        Acepta el token por header (fetch) o por query param (<img src=...>,
+        que no puede mandar headers custom)."""
+        bearer = authorization[7:] if authorization and authorization.startswith("Bearer ") else None
+        if not _get_user_by_token(bearer or token):
+            raise HTTPException(status_code=401, detail="No autenticado")
         from fastapi.responses import FileResponse
         import os
         event = _db.get_event(event_id)
@@ -307,13 +345,13 @@ def add_push_routes(app: FastAPI, notifier, vapid_manager):
         return {"ok": ok, "devices": notifier.subscription_count()}
 
     @app.delete("/api/push/subscribe/{device_id}")
-    async def unsubscribe(device_id: str):
+    async def unsubscribe(device_id: str, user: dict = Depends(require_role("admin"))):
         """Cancela las notificaciones para un dispositivo."""
         notifier.remove_subscription(device_id)
         return {"ok": True}
 
     @app.get("/api/push/devices")
-    async def devices():
+    async def devices(user: dict = Depends(require_auth)):
         """Lista dispositivos suscritos."""
         subs = notifier.get_subscriptions()
         with notifier.db._connect() as conn:
@@ -324,7 +362,7 @@ def add_push_routes(app: FastAPI, notifier, vapid_manager):
         return [dict(r) for r in rows]
 
     @app.post("/api/push/test")
-    async def test_push():
+    async def test_push(user: dict = Depends(require_role("admin"))):
         """Envía una notificación de prueba a todos los dispositivos."""
         await notifier.notify_raw(
             title="🛡️ HomeGuard AI — Prueba",
@@ -339,7 +377,7 @@ def add_push_routes(app: FastAPI, notifier, vapid_manager):
         feedback: str  # "true_positive" | "false_positive"
 
     @app.post("/api/events/{event_id}/feedback")
-    async def event_feedback(event_id: str, body: FeedbackBody):
+    async def event_feedback(event_id: str, body: FeedbackBody, user: dict = Depends(require_auth)):
         if body.feedback not in ("true_positive", "false_positive"):
             return JSONResponse({"ok": False, "error": "valor inválido"}, status_code=400)
         try:
@@ -494,7 +532,7 @@ def add_admin_routes(app: FastAPI, db, core=None):
     # ── CÁMARAS ─────────────────────────────────────────────
 
     @app.get("/api/admin/cameras")
-    async def admin_get_cameras():
+    async def admin_get_cameras(user: dict = Depends(require_role("admin"))):
         with db._connect() as conn:
             # Combinar camera_config (agregadas desde admin) y cameras (del sistema)
             rows = conn.execute("""
@@ -514,7 +552,7 @@ def add_admin_routes(app: FastAPI, db, core=None):
         return [dict(r) for r in rows]
 
     @app.post("/api/admin/cameras")
-    async def admin_add_camera(cam: CameraCreate):
+    async def admin_add_camera(cam: CameraCreate, user: dict = Depends(require_role("admin"))):
         cam_id = cam.id or new_id("cam")
         with db._connect() as conn:
             conn.execute("""
@@ -532,7 +570,7 @@ def add_admin_routes(app: FastAPI, db, core=None):
         return {"ok": True, "id": cam_id}
 
     @app.put("/api/admin/cameras/{cam_id}")
-    async def admin_update_camera(cam_id: str, cam: CameraCreate):
+    async def admin_update_camera(cam_id: str, cam: CameraCreate, user: dict = Depends(require_role("admin"))):
         with db._connect() as conn:
             conn.execute("""
                 UPDATE camera_config SET name=?, rtsp_url=?, source_type=?,
@@ -545,7 +583,7 @@ def add_admin_routes(app: FastAPI, db, core=None):
         return {"ok": True}
 
     @app.delete("/api/admin/cameras/{cam_id}")
-    async def admin_delete_camera(cam_id: str):
+    async def admin_delete_camera(cam_id: str, user: dict = Depends(require_role("admin"))):
         with db._connect() as conn:
             conn.execute("DELETE FROM camera_config WHERE id=?", (cam_id,))
             conn.execute("DELETE FROM cameras WHERE id=?", (cam_id,))
@@ -562,13 +600,13 @@ def add_admin_routes(app: FastAPI, db, core=None):
     # ── SENSORES ─────────────────────────────────────────────
 
     @app.get("/api/admin/sensors")
-    async def admin_get_sensors():
+    async def admin_get_sensors(user: dict = Depends(require_role("admin"))):
         with db._connect() as conn:
             rows = conn.execute("SELECT * FROM sensors ORDER BY created_at DESC").fetchall()
         return [dict(r) for r in rows]
 
     @app.post("/api/admin/sensors")
-    async def admin_add_sensor(s: SensorCreate):
+    async def admin_add_sensor(s: SensorCreate, user: dict = Depends(require_role("admin"))):
         sid = s.id or new_id("sen")
         with db._connect() as conn:
             conn.execute("""
@@ -581,7 +619,7 @@ def add_admin_routes(app: FastAPI, db, core=None):
         return {"ok": True, "id": sid}
 
     @app.put("/api/admin/sensors/{sid}")
-    async def admin_update_sensor(sid: str, s: SensorCreate):
+    async def admin_update_sensor(sid: str, s: SensorCreate, user: dict = Depends(require_role("admin"))):
         with db._connect() as conn:
             conn.execute("""
                 UPDATE sensors SET name=?, type=?, location=?,
@@ -592,7 +630,7 @@ def add_admin_routes(app: FastAPI, db, core=None):
         return {"ok": True}
 
     @app.delete("/api/admin/sensors/{sid}")
-    async def admin_delete_sensor(sid: str):
+    async def admin_delete_sensor(sid: str, user: dict = Depends(require_role("admin"))):
         with db._connect() as conn:
             conn.execute("DELETE FROM sensors WHERE id=?", (sid,))
             conn.commit()
@@ -660,7 +698,7 @@ def add_admin_routes(app: FastAPI, db, core=None):
         return {"id": user["id"], "name": user["name"], "role": user["role"]}
 
     @app.get("/api/admin/users")
-    async def admin_get_users():
+    async def admin_get_users(user: dict = Depends(require_role("admin"))):
         with db._connect() as conn:
             rows = conn.execute(
                 "SELECT id, name, role, created_at FROM users ORDER BY created_at DESC"
@@ -668,7 +706,7 @@ def add_admin_routes(app: FastAPI, db, core=None):
         return [dict(r) for r in rows]
 
     @app.post("/api/admin/users")
-    async def admin_add_user(u: UserCreate):
+    async def admin_add_user(u: UserCreate, user: dict = Depends(require_role("admin"))):
         import hashlib
         uid = u.id or new_id("usr")
         pin_hash = hashlib.sha256(u.pin.encode()).hexdigest() if u.pin else None
@@ -687,7 +725,7 @@ def add_admin_routes(app: FastAPI, db, core=None):
         return {"ok": True, "id": uid}
 
     @app.put("/api/admin/users/{uid}")
-    async def admin_update_user(uid: str, u: UserCreate):
+    async def admin_update_user(uid: str, u: UserCreate, user: dict = Depends(require_role("admin"))):
         import hashlib
         with db._connect() as conn:
             if u.pin:
@@ -705,7 +743,7 @@ def add_admin_routes(app: FastAPI, db, core=None):
         return {"ok": True}
 
     @app.delete("/api/admin/users/{uid}")
-    async def admin_delete_user(uid: str):
+    async def admin_delete_user(uid: str, user: dict = Depends(require_role("admin"))):
         with db._connect() as conn:
             conn.execute("DELETE FROM users WHERE id=?", (uid,))
             conn.commit()
@@ -714,13 +752,13 @@ def add_admin_routes(app: FastAPI, db, core=None):
     # ── ZONAS ────────────────────────────────────────────────
 
     @app.get("/api/admin/zones")
-    async def admin_get_zones():
+    async def admin_get_zones(user: dict = Depends(require_role("admin"))):
         with db._connect() as conn:
             rows = conn.execute("SELECT * FROM zones ORDER BY created_at DESC").fetchall()
         return [dict(r) for r in rows]
 
     @app.post("/api/admin/zones")
-    async def admin_add_zone(z: ZoneCreate):
+    async def admin_add_zone(z: ZoneCreate, user: dict = Depends(require_role("admin"))):
         zid = z.id or new_id("zon")
         with db._connect() as conn:
             conn.execute("""
@@ -731,7 +769,7 @@ def add_admin_routes(app: FastAPI, db, core=None):
         return {"ok": True, "id": zid}
 
     @app.put("/api/admin/zones/{zid}")
-    async def admin_toggle_zone(zid: str, z: ZoneCreate):
+    async def admin_toggle_zone(zid: str, z: ZoneCreate, user: dict = Depends(require_role("admin"))):
         with db._connect() as conn:
             conn.execute(
                 "UPDATE zones SET name=?, type=?, armed=? WHERE id=?",
@@ -741,7 +779,7 @@ def add_admin_routes(app: FastAPI, db, core=None):
         return {"ok": True}
 
     @app.delete("/api/admin/zones/{zid}")
-    async def admin_delete_zone(zid: str):
+    async def admin_delete_zone(zid: str, user: dict = Depends(require_role("admin"))):
         with db._connect() as conn:
             conn.execute("DELETE FROM zones WHERE id=?", (zid,))
             conn.commit()
@@ -750,7 +788,7 @@ def add_admin_routes(app: FastAPI, db, core=None):
     # ── RESUMEN ADMIN ────────────────────────────────────────
 
     @app.get("/api/admin/summary")
-    async def admin_summary():
+    async def admin_summary(user: dict = Depends(require_role("admin"))):
         with db._connect() as conn:
             cams    = conn.execute("""
                 SELECT COUNT(*) FROM (
@@ -865,6 +903,7 @@ def add_audio_routes(app: FastAPI, db, core=None):
         hours:      int = 24,
         limit:      int = 100,
         offset:     int = 0,
+        user: dict = Depends(require_auth),
     ):
         return db.get_audio_events(
             sound_type=sound_type,
@@ -876,12 +915,12 @@ def add_audio_routes(app: FastAPI, db, core=None):
 
     # ── GET /api/audio/summary — resumen para dashboard ─────
     @app.get("/api/audio/summary")
-    async def audio_summary(hours: int = 24):
+    async def audio_summary(hours: int = 24, user: dict = Depends(require_auth)):
         return db.get_audio_summary(hours=hours)
 
     # ── GET /api/audio/sound-types — catálogo ───────────────
     @app.get("/api/audio/sound-types")
-    async def audio_sound_types():
+    async def audio_sound_types(user: dict = Depends(require_auth)):
         return [
             {"value": k, "label": v["label"],
              "emoji": v["emoji"], "severity": v["severity"]}
@@ -890,7 +929,7 @@ def add_audio_routes(app: FastAPI, db, core=None):
 
     # ── POST /api/audio/test — simular evento para pruebas ──
     @app.post("/api/audio/test")
-    async def audio_test(body: dict):
+    async def audio_test(body: dict, user: dict = Depends(require_role("admin"))):
         """Simula un evento de audio para probar la integración."""
         sound_type = body.get("sound_type", "bark")
         test_payload = {
@@ -950,7 +989,7 @@ def add_infra_routes(app: FastAPI, db, core=None):
             monitor._devices.pop(device["id"], None)
 
     @app.get("/api/infra/devices")
-    async def infra_list(enabled_only: bool = False):
+    async def infra_list(enabled_only: bool = False, user: dict = Depends(require_auth)):
         devices = db.get_infra_devices(enabled_only=enabled_only)
         monitor = getattr(core, "health_monitor", None) if core else None
         health_map = {s["device_id"]: s for s in monitor.get_status()} if monitor else {}
@@ -964,7 +1003,7 @@ def add_infra_routes(app: FastAPI, db, core=None):
         return devices
 
     @app.get("/api/infra/devices/{device_id}")
-    async def infra_get(device_id: str):
+    async def infra_get(device_id: str, user: dict = Depends(require_auth)):
         from fastapi import HTTPException
         d = db.get_infra_device(device_id)
         if not d:
@@ -972,7 +1011,7 @@ def add_infra_routes(app: FastAPI, db, core=None):
         return d
 
     @app.post("/api/infra/devices")
-    async def infra_create(body: InfraDeviceIn):
+    async def infra_create(body: InfraDeviceIn, user: dict = Depends(require_role("admin"))):
         from fastapi import HTTPException
         if body.device_type not in VALID_TYPES:
             raise HTTPException(status_code=400,
@@ -999,7 +1038,7 @@ def add_infra_routes(app: FastAPI, db, core=None):
         return {"ok": ok, "id": device["id"]}
 
     @app.put("/api/infra/devices/{device_id}")
-    async def infra_update(device_id: str, body: InfraDeviceIn):
+    async def infra_update(device_id: str, body: InfraDeviceIn, user: dict = Depends(require_role("admin"))):
         from fastapi import HTTPException
         if not db.get_infra_device(device_id):
             raise HTTPException(status_code=404, detail="Dispositivo no encontrado")
@@ -1012,7 +1051,7 @@ def add_infra_routes(app: FastAPI, db, core=None):
         return {"ok": ok}
 
     @app.patch("/api/infra/devices/{device_id}/toggle")
-    async def infra_toggle(device_id: str):
+    async def infra_toggle(device_id: str, user: dict = Depends(require_role("admin"))):
         from fastapi import HTTPException
         d = db.get_infra_device(device_id)
         if not d:
@@ -1024,14 +1063,14 @@ def add_infra_routes(app: FastAPI, db, core=None):
         return {"ok": ok, "enabled": new_state}
 
     @app.delete("/api/infra/devices/{device_id}")
-    async def infra_delete(device_id: str):
+    async def infra_delete(device_id: str, user: dict = Depends(require_role("admin"))):
         monitor = getattr(core, "health_monitor", None) if core else None
         if monitor:
             monitor._devices.pop(device_id, None)
         return {"ok": db.delete_infra_device(device_id)}
 
     @app.get("/api/infra/device-types")
-    async def infra_types():
+    async def infra_types(user: dict = Depends(require_auth)):
         return [
             {"value": "nvr",             "label": "NVR / Grabador"},
             {"value": "router",          "label": "Router / Switch"},
@@ -1052,12 +1091,12 @@ def add_scanner_routes(app: FastAPI, db):
     scanner = NetworkScanner(timeout=0.8, max_concurrent=50)
 
     @app.get("/api/scanner/subnet")
-    async def get_subnet():
+    async def get_subnet(user: dict = Depends(require_role("admin"))):
         subnet = scanner._detect_local_subnet()
         return {"subnet": subnet}
 
     @app.get("/api/scanner/scan")
-    async def scan_network(subnet: str = None):
+    async def scan_network(subnet: str = None, user: dict = Depends(require_role("admin"))):
         """Escanea la red y retorna dispositivos encontrados."""
         try:
             devices = await scanner.scan(subnet=subnet)
@@ -1069,7 +1108,7 @@ def add_scanner_routes(app: FastAPI, db):
             return {"error": str(e), "devices": [], "total": 0}
 
     @app.post("/api/scanner/probe")
-    async def probe_ip(body: dict):
+    async def probe_ip(body: dict, user: dict = Depends(require_role("admin"))):
         """Analiza una IP específica ingresada manualmente."""
         ip = body.get("ip", "").strip()
         if not ip:
@@ -1085,7 +1124,7 @@ def add_health_routes(app: FastAPI, core):
     """Endpoints del monitor de salud del sistema."""
 
     @app.get("/api/health/devices")
-    async def health_devices():
+    async def health_devices(user: dict = Depends(require_auth)):
         """Estado de salud de todos los dispositivos."""
         monitor = getattr(core, 'health_monitor', None)
         if not monitor:
@@ -1093,7 +1132,7 @@ def add_health_routes(app: FastAPI, core):
         return monitor.get_status()
 
     @app.get("/api/health/alerts")
-    async def health_alerts(limit: int = 50):
+    async def health_alerts(limit: int = 50, user: dict = Depends(require_auth)):
         """Últimas alertas del monitor de salud."""
         monitor = getattr(core, 'health_monitor', None)
         if not monitor:
@@ -1101,7 +1140,7 @@ def add_health_routes(app: FastAPI, core):
         return monitor.get_alerts(limit=limit)
 
     @app.get("/api/health/summary")
-    async def health_summary():
+    async def health_summary(user: dict = Depends(require_auth)):
         """Resumen de salud del sistema."""
         monitor = getattr(core, 'health_monitor', None)
         if not monitor:
@@ -1122,6 +1161,7 @@ def add_health_routes(app: FastAPI, core):
         alert_type: Optional[str] = None,
         limit: int = Query(default=100, le=500),
         offset: int = 0,
+        user: dict = Depends(require_auth),
     ):
         """Log persistente de eventos de salud desde la DB."""
         try:
@@ -1140,7 +1180,7 @@ def add_health_routes(app: FastAPI, core):
             return []
 
     @app.get("/api/claude/stats")
-    async def claude_stats():
+    async def claude_stats(user: dict = Depends(require_auth)):
         """Estadísticas de uso y gasto de Claude Vision."""
         limiter = getattr(core, "limiter", None)
         if not limiter:
@@ -1148,7 +1188,7 @@ def add_health_routes(app: FastAPI, core):
         return limiter.stats()
 
     @app.get("/api/claude/limits")
-    async def claude_limits():
+    async def claude_limits(user: dict = Depends(require_auth)):
         """Configuración actual de los límites de Claude Vision."""
         limiter = getattr(core, "limiter", None)
         if not limiter:
@@ -1162,7 +1202,7 @@ def add_health_routes(app: FastAPI, core):
         }
 
     @app.post("/api/claude/limits")
-    async def claude_limits_set(body: dict):
+    async def claude_limits_set(body: dict, user: dict = Depends(require_role("admin"))):
         """Actualiza límites de Claude Vision en memoria y en .env."""
         import re as _re
         from pathlib import Path as P
@@ -1224,64 +1264,8 @@ def add_health_routes(app: FastAPI, core):
             }
         }
 
-    @app.post("/api/claude/limits")
-    async def claude_limits_set(body: dict):
-        """Actualiza límites de Claude Vision en memoria y en .env."""
-        import re as _re
-        from pathlib import Path as P
-
-        limiter = getattr(core, "limiter", None)
-        updated = {}
-
-        # Validar y aplicar en memoria
-        try:
-            if "daily_limit" in body:
-                val = max(1, int(body["daily_limit"]))
-                if limiter: limiter.daily_limit = val
-                updated["CLAUDE_DAILY_LIMIT"] = str(val)
-
-            if "monthly_budget_usd" in body:
-                val = max(0.1, float(body["monthly_budget_usd"]))
-                if limiter: limiter.monthly_budget_usd = val
-                updated["CLAUDE_MONTHLY_BUDGET"] = f"{val:.2f}"
-
-            if "camera_cooldown_s" in body:
-                val = max(5, int(body["camera_cooldown_s"]))
-                if limiter: limiter.camera_cooldown_s = val
-                updated["CLAUDE_COOLDOWN_S"] = str(val)
-
-            if "cost_per_call_usd" in body:
-                val = max(0.001, float(body["cost_per_call_usd"]))
-                if limiter: limiter.cost_per_call_usd = val
-                updated["CLAUDE_COST_PER_CALL"] = f"{val:.4f}"
-
-        except (ValueError, TypeError) as e:
-            return {"ok": False, "message": f"Valor inválido: {e}"}
-
-        # Persistir en .env
-        env_path = P.home() / "homeguard" / ".env"
-        if env_path.exists() and updated:
-            env_text = env_path.read_text()
-            for key, val in updated.items():
-                if key in env_text:
-                    env_text = _re.sub(rf"^{key}=.*", f"{key}={val}", env_text, flags=_re.MULTILINE)
-                else:
-                    env_text += f"\n{key}={val}\n"
-            env_path.write_text(env_text)
-
-        return {
-            "ok":     True,
-            "saved":  list(updated.keys()),
-            "limits": {
-                "daily_limit":        limiter.daily_limit        if limiter else None,
-                "monthly_budget_usd": limiter.monthly_budget_usd if limiter else None,
-                "camera_cooldown_s":  limiter.camera_cooldown_s  if limiter else None,
-                "cost_per_call_usd":  limiter.cost_per_call_usd  if limiter else None,
-            }
-        }
-
     @app.get("/api/claude/config")
-    async def claude_config_get():
+    async def claude_config_get(user: dict = Depends(require_auth)):
         """Estado de Claude Vision: habilitado, api key, stats de uso."""
         limiter = getattr(core, "limiter", None)
 
@@ -1323,7 +1307,7 @@ def add_health_routes(app: FastAPI, core):
         }
 
     @app.post("/api/claude/config")
-    async def claude_config_set(body: dict):
+    async def claude_config_set(body: dict, user: dict = Depends(require_role("admin"))):
         """Actualiza habilitación de Claude Vision y/o la API key."""
         from datetime import datetime
         from pathlib import Path as P

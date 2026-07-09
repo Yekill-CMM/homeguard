@@ -480,15 +480,16 @@ if __name__ == "__main__":
 # ----------------------------------------------------------------------------
 
 def add_presence_routes(app, monitor: "PresenceMonitor") -> None:
-    from fastapi import Body, Request
+    from fastapi import Body, Request, Depends
     from fastapi.responses import JSONResponse
+    from dashboard.api import require_auth, require_role
 
     @app.get("/api/presence")
-    async def presence_status():
+    async def presence_status(user: dict = Depends(require_auth)):
         return monitor.status()
 
     @app.post("/api/arm-state")
-    async def set_arm_state(payload: dict = Body(...)):
+    async def set_arm_state(payload: dict = Body(...), user: dict = Depends(require_auth)):
         mode = payload.get("mode", "")
         by = payload.get("by", "dashboard")
         try:
@@ -499,7 +500,7 @@ def add_presence_routes(app, monitor: "PresenceMonitor") -> None:
                                 content={"ok": False, "error": str(exc)})
 
     @app.get("/api/presence/log")
-    async def presence_log(limit: int = 50):
+    async def presence_log(limit: int = 50, user: dict = Depends(require_auth)):
         with monitor._conn() as conn:
             rows = conn.execute(
                 "SELECT pl.at, pd.person_name, pd.device_name, pl.event "
@@ -510,7 +511,7 @@ def add_presence_routes(app, monitor: "PresenceMonitor") -> None:
         return [dict(r) for r in rows]
 
     @app.get("/api/presence/devices")
-    async def list_presence_devices():
+    async def list_presence_devices(user: dict = Depends(require_auth)):
         """Lista todos los dispositivos de presencia."""
         with monitor._conn() as conn:
             rows = conn.execute(
@@ -521,7 +522,7 @@ def add_presence_routes(app, monitor: "PresenceMonitor") -> None:
         return [dict(r) for r in rows]
 
     @app.delete("/api/presence/devices/{device_id}")
-    async def delete_presence_device(device_id: int):
+    async def delete_presence_device(device_id: int, user: dict = Depends(require_role("admin"))):
         """Elimina un dispositivo de presencia."""
         with monitor._conn() as conn:
             row = conn.execute(
@@ -538,7 +539,7 @@ def add_presence_routes(app, monitor: "PresenceMonitor") -> None:
         return {"ok": True}
 
     @app.patch("/api/presence/devices/{device_id}")
-    async def update_presence_device(device_id: int, payload: dict = Body(...)):
+    async def update_presence_device(device_id: int, payload: dict = Body(...), user: dict = Depends(require_role("admin"))):
         """Actualiza nombre o estado habilitado de un dispositivo."""
         allowed = {"person_name", "device_name", "enabled"}
         updates = {k: v for k, v in payload.items() if k in allowed}
