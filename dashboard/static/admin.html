@@ -1136,6 +1136,20 @@ header {
 </div>
 
 <script>
+// Interceptor de fetch instalado ANTES que cualquier otro código de este
+// script (incluida la llamada temprana a loadOverview() más abajo), para
+// que ninguna llamada quede sin el Bearer token. Autónomo — no depende de
+// hgAuthHeader()/HG_TOKEN_KEY, que se declaran en el segundo <script>.
+(function(){
+  var _origFetch = window.fetch.bind(window);
+  window.fetch = function(input, init){
+    init = init || {};
+    var t = localStorage.getItem('hg_auth_token_admin');
+    init.headers = Object.assign({}, init.headers || {}, t ? {'Authorization': 'Bearer ' + t} : {});
+    return _origFetch(input, init);
+  };
+})();
+
 const API = window.location.origin;
 let currentModal = null;
 let editingId     = null;
