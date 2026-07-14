@@ -720,7 +720,7 @@ def add_admin_routes(app: FastAPI, db, core=None):
                 INSERT OR REPLACE INTO users
                     (id, name, role, pin_hash, pin_expiry, created_at)
                 VALUES (?,?,?,?,?,?)
-            """, (uid, u.name, u.role, pin_hash, u.pin_expiry, now()))
+            """, (uid, u.name, u.role, pin_hash, (u.pin_expiry or None), now()))
             conn.commit()
         return {"ok": True, "id": uid}
 
@@ -732,12 +732,12 @@ def add_admin_routes(app: FastAPI, db, core=None):
                 pin_hash = hashlib.sha256(u.pin.encode()).hexdigest()
                 conn.execute(
                     "UPDATE users SET name=?, role=?, pin_hash=?, pin_expiry=? WHERE id=?",
-                    (u.name, u.role, pin_hash, u.pin_expiry, uid)
+                    (u.name, u.role, pin_hash, (u.pin_expiry or None), uid)
                 )
             else:
                 conn.execute(
                     "UPDATE users SET name=?, role=?, pin_expiry=? WHERE id=?",
-                    (u.name, u.role, u.pin_expiry, uid)
+                    (u.name, u.role, (u.pin_expiry or None), uid)
                 )
             conn.commit()
         return {"ok": True}
