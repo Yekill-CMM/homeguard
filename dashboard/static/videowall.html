@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>HomeGuard — Videowall</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:       #07090e;
+  --s1:       #0c1019;
+  --s2:       #111722;
+  --s3:       #18212e;
+  --border:   #1f2d3d;
+  --accent:   #00e5ff;
+  --green:    #00e676;
+  --amber:    #ffc107;
+  --red:      #ff1744;
+  --text:     #d0e4f4;
+  --muted:    #4a6070;
+  --orb:      'Orbitron', monospace;
+  --sans:     'DM Sans', sans-serif;
+  --mono:     'JetBrains Mono', monospace;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  min-height: 100vh;
+}
+
+/* ─── PIN overlay (mismo patrón que mobile.html) ─────────── */
+#pin-overlay {
+  position: fixed; inset: 0; z-index: 100;
+  background: var(--bg);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 18px;
+}
+#pin-overlay.hidden { display: none; }
+.pin-logo { font-family: var(--orb); font-size: 12px; color: var(--accent); letter-spacing: 4px; text-transform: uppercase; }
+.pin-title { font-family: var(--orb); font-size: 20px; color: var(--text); text-align: center; }
+.pin-subtitle { font-size: 13px; color: var(--muted); text-align: center; margin-top: -12px; }
+.pin-dots { display: flex; gap: 14px; margin: 8px 0; }
+.pin-dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--border); background: transparent; transition: all .2s; }
+.pin-dot.filled { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 8px var(--accent); }
+.pin-dot.error  { background: var(--red); border-color: var(--red); }
+.pin-error { font-size: 12px; color: var(--red); min-height: 18px; text-align: center; }
+.pin-keypad { display: grid; grid-template-columns: repeat(3, 72px); gap: 12px; }
+.pin-key { height: 72px; border-radius: 12px; background: var(--s2); border: 1px solid var(--border); color: var(--text); font-size: 22px; font-weight: 600; cursor: pointer; transition: all .15s; -webkit-tap-highlight-color: transparent; display: flex; align-items: center; justify-content: center; }
+.pin-key:active { background: var(--accent); color: #000; transform: scale(.95); }
+.pin-key.del { font-size: 18px; color: var(--muted); }
+.pin-key.empty { background: transparent; border: none; cursor: default; }
+
+/* ─── Videowall ───────────────────────────────────────────── */
+#app { display: none; min-height: 100vh; flex-direction: column; }
+#app.visible { display: flex; }
+
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 20px; border-bottom: 1px solid var(--border); background: var(--s1);
+  flex-wrap: wrap; gap: 10px;
+}
+header h1 {
+  font-family: var(--orb); font-size: 15px; letter-spacing: 2px;
+  color: var(--text); margin: 0; text-transform: uppercase;
+}
+header h1 span { color: var(--accent); }
+.header-actions { display: flex; gap: 10px; align-items: center; }
+.btn-ghost {
+  background: transparent; border: 1px solid var(--border); color: var(--muted);
+  border-radius: 8px; padding: 8px 14px; font-size: 12px; font-family: var(--sans);
+  font-weight: 600; cursor: pointer; transition: all .15s;
+}
+.btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+
+#grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 12px;
+  padding: 16px;
+  align-content: start;
+}
+.empty-state {
+  grid-column: 1 / -1;
+  text-align: center;
+  color: var(--muted);
+  padding: 60px 20px;
+  font-size: 14px;
+}
+
+.tile {
+  position: relative;
+  background: var(--s2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+}
+.tile img {
+  width: 100%; height: 100%; object-fit: cover; display: block;
+  background: #000;
+  cursor: zoom-in;
+}
+.tile-label {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 10px;
+  background: linear-gradient(to top, rgba(0,0,0,.75), transparent);
+  font-family: var(--mono); font-size: 12px; color: var(--text);
+  pointer-events: none;
+}
+.tile-status { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 6px var(--green); }
+.tile.offline .tile-status { background: var(--red); box-shadow: 0 0 6px var(--red); }
+
+.tile-fallback {
+  position: absolute; inset: 0;
+  display: none;
+  flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  background: var(--s3);
+  color: var(--muted); font-size: 13px;
+}
+.tile.offline .tile-fallback { display: flex; }
+.tile.offline img { display: none; }
+.retry-btn {
+  background: var(--s2); border: 1px solid var(--border); color: var(--accent);
+  border-radius: 8px; padding: 6px 14px; font-size: 12px; cursor: pointer;
+}
+
+footer {
+  padding: 10px 20px; text-align: center; font-size: 11px; color: var(--muted);
+  font-family: var(--mono); border-top: 1px solid var(--border);
+}
+</style>
+</head>
+<body>
+
+<div id="pin-overlay">
+  <div class="pin-logo">HomeGuard AI</div>
+  <div class="pin-title">Videowall</div>
+  <div class="pin-subtitle">Ingresa tu PIN de 6 dígitos</div>
+  <div class="pin-dots">
+    <div class="pin-dot" id="pd0"></div><div class="pin-dot" id="pd1"></div>
+    <div class="pin-dot" id="pd2"></div><div class="pin-dot" id="pd3"></div>
+    <div class="pin-dot" id="pd4"></div><div class="pin-dot" id="pd5"></div>
+  </div>
+  <div class="pin-error" id="pin-error"></div>
+  <div class="pin-keypad">
+    <button class="pin-key" onclick="pinKey('1')">1</button>
+    <button class="pin-key" onclick="pinKey('2')">2</button>
+    <button class="pin-key" onclick="pinKey('3')">3</button>
+    <button class="pin-key" onclick="pinKey('4')">4</button>
+    <button class="pin-key" onclick="pinKey('5')">5</button>
+    <button class="pin-key" onclick="pinKey('6')">6</button>
+    <button class="pin-key" onclick="pinKey('7')">7</button>
+    <button class="pin-key" onclick="pinKey('8')">8</button>
+    <button class="pin-key" onclick="pinKey('9')">9</button>
+    <div class="pin-key empty"></div>
+    <button class="pin-key" onclick="pinKey('0')">0</button>
+    <button class="pin-key del" onclick="pinDel()">⌫</button>
+  </div>
+</div>
+
+<div id="app">
+  <header>
+    <h1>Home<span>Guard</span> · Videowall</h1>
+    <div class="header-actions">
+      <button class="btn-ghost" onclick="reloadAll()">↻ Actualizar todas</button>
+      <button class="btn-ghost" onclick="logout()">Salir</button>
+    </div>
+  </header>
+  <div id="grid">
+    <div class="empty-state">Cargando cámaras…</div>
+  </div>
+  <footer>Vista en vivo — sin grabación · las cámaras cortadas reintentan solas</footer>
+</div>
+
+<script>
+const API = window.location.origin;
+const HG_TOKEN_KEY = 'hg_auth_token';
+const ALLOWED_ROLES_AUTH = ['admin', 'family', 'tech'];
+let _pinBuffer = '';
+
+function pinKey(d) {
+  if (_pinBuffer.length >= 6) return;
+  _pinBuffer += d; _updateDots();
+  if (_pinBuffer.length === 6) setTimeout(_pinSubmit, 120);
+}
+function pinDel() {
+  _pinBuffer = _pinBuffer.slice(0, -1);
+  document.getElementById('pin-error').textContent = '';
+  _updateDots();
+}
+function _updateDots() {
+  for (let i = 0; i < 6; i++) {
+    const d = document.getElementById('pd' + i);
+    d.classList.toggle('filled', i < _pinBuffer.length);
+    d.classList.remove('error');
+  }
+}
+async function _pinSubmit() {
+  try {
+    const r = await fetch(API + '/api/auth/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin: _pinBuffer }),
+    });
+    const data = await r.json();
+    if (r.ok && data.token) {
+      if (!ALLOWED_ROLES_AUTH.includes(data.user.role)) { _pinError('Sin acceso para este perfil'); return; }
+      localStorage.setItem(HG_TOKEN_KEY, data.token);
+      enterApp();
+    } else { _pinError('PIN incorrecto'); }
+  } catch (e) { _pinError('Error de conexión'); }
+}
+function _pinError(msg) {
+  _pinBuffer = '';
+  document.getElementById('pin-error').textContent = msg;
+  for (let i = 0; i < 6; i++) { const d = document.getElementById('pd' + i); d.classList.remove('filled'); d.classList.add('error'); }
+  setTimeout(() => { for (let i = 0; i < 6; i++) document.getElementById('pd' + i).classList.remove('error'); }, 800);
+}
+function logout() {
+  const t = localStorage.getItem(HG_TOKEN_KEY);
+  if (t) fetch(API + '/api/auth/logout', { method: 'POST', headers: { 'Authorization': 'Bearer ' + t } });
+  localStorage.removeItem(HG_TOKEN_KEY);
+  window.location.reload();
+}
+function enterApp() {
+  document.getElementById('pin-overlay').classList.add('hidden');
+  document.getElementById('app').classList.add('visible');
+  loadCameras();
+}
+
+// ─── Sesión existente (evita re-pedir PIN si ya está logueado) ──
+(async function checkSession() {
+  const t = localStorage.getItem(HG_TOKEN_KEY);
+  if (!t) return;
+  try {
+    const r = await fetch(API + '/api/auth/me', { headers: { 'Authorization': 'Bearer ' + t } });
+    if (r.ok) {
+      const u = await r.json();
+      if (ALLOWED_ROLES_AUTH.includes(u.role)) { enterApp(); return; }
+    }
+  } catch (e) {}
+})();
+
+// ─── Grilla de cámaras ────────────────────────────────────────
+const RETRY_DELAYS_MS = [2000, 4000, 8000, 15000]; // backoff, luego manual
+
+function buildTile(cam) {
+  const tile = document.createElement('div');
+  tile.className = 'tile';
+  tile.dataset.camId = cam.id;
+  tile.dataset.retries = '0';
+
+  const img = document.createElement('img');
+  img.alt = cam.name;
+  img.onerror = () => onStreamError(tile, img, cam);
+  img.onload = () => { tile.classList.remove('offline'); tile.dataset.retries = '0'; };
+  img.ondblclick = () => { if (img.requestFullscreen) img.requestFullscreen(); };
+
+  const label = document.createElement('div');
+  label.className = 'tile-label';
+  label.innerHTML = `<span>${cam.name}</span><span class="tile-status"></span>`;
+
+  const fallback = document.createElement('div');
+  fallback.className = 'tile-fallback';
+  fallback.innerHTML = `<span>Sin señal — ${cam.name}</span>`;
+  const retryBtn = document.createElement('button');
+  retryBtn.className = 'retry-btn';
+  retryBtn.textContent = 'Reintentar';
+  retryBtn.onclick = () => startStream(tile, img, cam);
+  fallback.appendChild(retryBtn);
+
+  tile.append(img, label, fallback);
+  startStream(tile, img, cam);
+  return tile;
+}
+
+function startStream(tile, img, cam) {
+  tile.classList.remove('offline');
+  const token = localStorage.getItem(HG_TOKEN_KEY);
+  img.src = `${API}/api/videowall/stream/${cam.id}?token=${token}&_=${Date.now()}`;
+}
+
+function onStreamError(tile, img, cam) {
+  tile.classList.add('offline');
+  const n = parseInt(tile.dataset.retries || '0', 10);
+  if (n >= RETRY_DELAYS_MS.length) return; // esperar reintento manual
+  tile.dataset.retries = String(n + 1);
+  setTimeout(() => startStream(tile, img, cam), RETRY_DELAYS_MS[n]);
+}
+
+async function loadCameras() {
+  const grid = document.getElementById('grid');
+  try {
+    const r = await fetch(API + '/api/videowall/cameras', {
+      headers: { 'Authorization': 'Bearer ' + localStorage.getItem(HG_TOKEN_KEY) },
+    });
+    if (!r.ok) throw new Error('http ' + r.status);
+    const cams = await r.json();
+    grid.innerHTML = '';
+    if (!cams.length) {
+      grid.innerHTML = '<div class="empty-state">No hay cámaras habilitadas.</div>';
+      return;
+    }
+    cams.forEach(cam => grid.appendChild(buildTile(cam)));
+  } catch (e) {
+    grid.innerHTML = '<div class="empty-state">No se pudo cargar la lista de cámaras.</div>';
+  }
+}
+function reloadAll() { loadCameras(); }
+</script>
+</body>
+</html>
