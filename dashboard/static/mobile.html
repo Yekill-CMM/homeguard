@@ -123,7 +123,7 @@ html, body {
   background: var(--surface);
   border-top: 1px solid var(--border);
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   flex-shrink: 0;
 	}
 
@@ -411,6 +411,44 @@ html, body {
 }
 .online  { background: var(--green); box-shadow: 0 0 5px var(--green); }
 .offline { background: var(--muted); }
+
+/* ─── Videowall (vivo) ──────────────────────────────────── */
+#videowall-grid { display: flex; flex-direction: column; gap: 10px; }
+
+.vw-tile {
+  position: relative;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+}
+.vw-tile img {
+  width: 100%; height: 100%; object-fit: cover; display: block;
+  background: #000;
+}
+.vw-label {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 10px;
+  background: linear-gradient(to top, rgba(0,0,0,.75), transparent);
+  font-family: var(--mono); font-size: 11px; color: var(--text);
+  pointer-events: none;
+}
+.vw-fallback {
+  position: absolute; inset: 0;
+  display: none;
+  flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+  background: var(--panel); color: var(--muted);
+  font-size: 12px; font-family: var(--mono);
+}
+.vw-tile.offline .vw-fallback { display: flex; }
+.vw-tile.offline img { display: none; }
+.vw-tile.offline .status-dot { background: var(--red); box-shadow: 0 0 5px var(--red); }
+.vw-retry {
+  background: var(--surface); border: 1px solid var(--border); color: var(--accent);
+  border-radius: 8px; padding: 6px 14px; font-size: 12px; cursor: pointer; font-family: var(--ui);
+}
 
 /* ─── Alertas ───────────────────────────────────────────── */
 .alert-card {
@@ -720,6 +758,12 @@ html, body {
       <div id="cameras-list"></div>
     </div>
 
+    <!-- VIDEOWALL (VIVO) -->
+    <div class="page" id="page-videowall">
+      <div class="section-title">cámaras en vivo</div>
+      <div id="videowall-grid"></div>
+    </div>
+
     <!-- ALERTAS -->
     <div class="page" id="page-alerts">
       <div class="section-title">alertas recientes</div>
@@ -911,6 +955,10 @@ html, body {
       <div class="tab-icon">📹</div>
       Cámaras
     </button>
+    <button class="tab" onclick="showTab('videowall',this)">
+      <div class="tab-icon">🎥</div>
+      Vivo
+    </button>
     <button class="tab" onclick="showTab('alerts',this)">
       <div class="tab-icon">🚨</div>
       Alertas
@@ -993,14 +1041,17 @@ setInterval(tick, 1000); tick();
 function showTab(name, btn) {
   var widget = document.getElementById('hg-arm-widget');
   if (widget) widget.style.display = name === 'settings' ? 'none' : '';
+  var wasVideowall = document.getElementById('page-videowall').classList.contains('active');
+  if (wasVideowall && name !== 'videowall') stopVideowall();
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.getElementById(`page-${name}`).classList.add('active');
   btn.classList.add('active');
-  if (name === 'alerts')   loadAlerts();
-  if (name === 'cameras')  loadCameras();
-  if (name === 'events')   loadEvents();
-  if (name === 'settings') loadSettings();
+  if (name === 'alerts')    loadAlerts();
+  if (name === 'cameras')   loadCameras();
+  if (name === 'events')    loadEvents();
+  if (name === 'settings')  loadSettings();
+  if (name === 'videowall') loadVideowall();
 }
 
 // ─── Utilidades ───────────────────────────────────────────
@@ -1152,6 +1203,86 @@ async function loadCameras() {
       : '<div class="empty"><div class="empty-icon">📹</div><div class="empty-text">Sin cámaras registradas</div></div>';
   } catch(e) {}
 }
+
+// ─── Videowall (vivo) ───────────────────────────────────────
+// Streams MJPEG a baja resolución/fps, generados on-demand por el
+// servidor. Se cortan al salir de la pestaña o al pasar la app a
+// segundo plano, para no dejar procesos ffmpeg corriendo de más.
+let _vwTiles = [];
+const VW_RETRY_DELAYS = [2000, 4000, 8000, 15000];
+
+async function loadVideowall() {
+  const grid = document.getElementById('videowall-grid');
+  try {
+    const cams = await fetch(`${API}/api/videowall/cameras`).then(r => r.json());
+    grid.innerHTML = '';
+    _vwTiles = [];
+    if (!cams.length) {
+      grid.innerHTML = '<div class="empty"><div class="empty-icon">🎥</div><div class="empty-text">Sin cámaras habilitadas</div></div>';
+      return;
+    }
+    cams.forEach(cam => grid.appendChild(buildVideowallTile(cam)));
+  } catch (e) {
+    grid.innerHTML = '<div class="empty"><div class="empty-icon">🎥</div><div class="empty-text">Error al cargar cámaras</div></div>';
+  }
+}
+
+function buildVideowallTile(cam) {
+  const tile = document.createElement('div');
+  tile.className = 'vw-tile';
+  tile.dataset.retries = '0';
+
+  const img = document.createElement('img');
+  img.alt = cam.name;
+  img.onerror = () => vwStreamError(tile, img, cam);
+  img.onload  = () => { tile.classList.remove('offline'); tile.dataset.retries = '0'; };
+
+  const label = document.createElement('div');
+  label.className = 'vw-label';
+  label.innerHTML = `<span>${cam.name}</span><span class="status-dot online"></span>`;
+
+  const fallback = document.createElement('div');
+  fallback.className = 'vw-fallback';
+  fallback.innerHTML = '<span>Sin señal</span>';
+  const retryBtn = document.createElement('button');
+  retryBtn.className = 'vw-retry';
+  retryBtn.textContent = 'Reintentar';
+  retryBtn.onclick = () => vwStartStream(tile, img, cam);
+  fallback.appendChild(retryBtn);
+
+  tile.append(img, label, fallback);
+  _vwTiles.push({ tile, img, cam });
+  vwStartStream(tile, img, cam);
+  return tile;
+}
+
+function vwStartStream(tile, img, cam) {
+  tile.classList.remove('offline');
+  const t = localStorage.getItem(HG_TOKEN_KEY);
+  img.src = `${API}/api/videowall/stream/${cam.id}?token=${t}&_=${Date.now()}`;
+}
+
+function vwStreamError(tile, img, cam) {
+  tile.classList.add('offline');
+  const n = parseInt(tile.dataset.retries || '0', 10);
+  if (n >= VW_RETRY_DELAYS.length) return; // esperar reintento manual
+  tile.dataset.retries = String(n + 1);
+  setTimeout(() => vwStartStream(tile, img, cam), VW_RETRY_DELAYS[n]);
+}
+
+function stopVideowall() {
+  _vwTiles.forEach(({ img }) => { img.src = ''; });
+  _vwTiles = [];
+}
+
+// Pausar streams si la app pasa a segundo plano (ahorra CPU/batería/
+// procesos ffmpeg en el servidor), y retomarlos al volver.
+document.addEventListener('visibilitychange', () => {
+  const vwActive = document.getElementById('page-videowall').classList.contains('active');
+  if (!vwActive) return;
+  if (document.hidden) stopVideowall();
+  else loadVideowall();
+});
 
 // ─── Alertas ──────────────────────────────────────────────
 async function loadAlerts() {
