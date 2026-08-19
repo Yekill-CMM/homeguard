@@ -124,6 +124,17 @@ async def main():
     if started == 0:
         logger.warning("Ningún adaptador pudo iniciar — modo dashboard.")
 
+    # Registrar los adaptadores RTSP en el hub del videowall para que
+    # reutilice sus frames en vez de abrir una conexión RTSP nueva por
+    # cada visor (ver dashboard/stream_hub.py).
+    from dashboard.stream_hub import hub as videowall_hub
+    rtsp_adapters_by_cam = {
+        adapter.camera_config.id: adapter
+        for adapter in adapters
+        if isinstance(adapter, RTSPAdapter)
+    }
+    videowall_hub.register_adapters(rtsp_adapters_by_cam)
+
     logger.info(f"Sistema activo — {started}/{len(adapters)} adaptadores online")
     logger.info("Pipeline corriendo. Ctrl+C para detener.")
 
@@ -237,3 +248,4 @@ async def _shutdown(adapters, core):
 
 if __name__ == "__main__":
     asyncio.run(main())
+

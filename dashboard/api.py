@@ -14,6 +14,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 from typing import Optional
 
+from dashboard.stream_hub import hub as stream_hub
+
 logger = logging.getLogger(__name__)
 _db = None
 
@@ -238,10 +240,9 @@ def create_app(db, port: int = 8000) -> FastAPI:
         return _db.get_cameras()
 
     # ── VIDEOWALL ────────────────────────────────────────────
-    # Vista en vivo liviana: snapshots MJPEG a baja resolución/fps por
-    # ffmpeg, sin grabación ni detección — eso ya lo hace el pipeline
-    # principal. El proceso ffmpeg vive solo mientras el cliente esté
-    # mirando esa cámara.
+    # Vista en vivo liviana: reutiliza el frame que ya captura el
+    # pipeline principal (adapters/rtsp_adapter.py) en vez de abrir una
+    # segunda conexión RTSP por cada visor — ver dashboard/stream_hub.py.
 
     def _videowall_camera(cam_id: str) -> Optional[dict]:
         with db._connect() as conn:
@@ -265,41 +266,6 @@ def create_app(db, port: int = 8000) -> FastAPI:
             """).fetchall()
         return [dict(r) for r in rows if r["enabled"]]
 
-    async def _mjpeg_frames(rtsp_url: str, fps: int = 2, width: int = 640):
-        import asyncio, shutil
-        ffmpeg_path = shutil.which("ffmpeg") or "/usr/bin/ffmpeg"
-        args = [
-            ffmpeg_path, "-rtsp_transport", "tcp", "-i", rtsp_url,
-            "-vf", f"fps={fps},scale={width}:-1",
-            "-f", "image2pipe", "-vcodec", "mjpeg", "-q:v", "6",
-            "-loglevel", "error", "pipe:1",
-        ]
-        proc = await asyncio.create_subprocess_exec(
-            *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
-        )
-        buf = b""
-        try:
-            while True:
-                chunk = await proc.stdout.read(4096)
-                if not chunk:
-                    break
-                buf += chunk
-                while True:
-                    start = buf.find(b"\xff\xd8")
-                    end = buf.find(b"\xff\xd9")
-                    if start == -1 or end == -1 or end <= start:
-                        break
-                    frame = buf[start:end + 2]
-                    buf = buf[end + 2:]
-                    yield (
-                        b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: "
-                        + str(len(frame)).encode() + b"\r\n\r\n" + frame + b"\r\n"
-                    )
-        finally:
-            if proc.returncode is None:
-                proc.kill()
-                await proc.wait()
-
     @app.get("/api/videowall/stream/{cam_id}")
     async def videowall_stream(cam_id: str, token: Optional[str] = None,
                                 authorization: str = Header(None)):
@@ -310,7 +276,7 @@ def create_app(db, port: int = 8000) -> FastAPI:
         if not cam or not cam.get("enabled") or not cam.get("rtsp_url"):
             raise HTTPException(status_code=404, detail="Cámara no disponible")
         return StreamingResponse(
-            _mjpeg_frames(cam["rtsp_url"]),
+            stream_hub.stream(cam_id, cam["rtsp_url"]),
             media_type="multipart/x-mixed-replace; boundary=frame",
         )
 
