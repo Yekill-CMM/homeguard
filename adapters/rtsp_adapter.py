@@ -46,6 +46,11 @@ class RTSPAdapter(BaseAdapter):
         self._last_event_time = 0.0
         self._ffmpeg_path = shutil.which("ffmpeg") or "/usr/local/bin/ffmpeg"
 
+        # Último frame capturado, reutilizable por el videowall sin abrir
+        # una segunda conexión RTSP a la cámara (ver dashboard/stream_hub.py).
+        self._latest_jpeg: Optional[bytes] = None
+        self._jpeg_lock = threading.Lock()
+
     async def start(self) -> bool:
         if self._running:
             return True
@@ -78,6 +83,15 @@ class RTSPAdapter(BaseAdapter):
 
     def is_healthy(self) -> bool:
         return self._running and self._thread is not None and self._thread.is_alive()
+
+    def get_latest_jpeg(self) -> Optional[bytes]:
+        """Último frame capturado, codificado como JPEG liviano.
+
+        Lo usa el videowall para mostrar video en vivo sin abrir una
+        conexión RTSP adicional a la cámara.
+        """
+        with self._jpeg_lock:
+            return self._latest_jpeg
 
     # ------------------------------------------------------------------
 
@@ -145,6 +159,8 @@ class RTSPAdapter(BaseAdapter):
                         (self._height, self._width, 3)
                     )
 
+                    self._update_latest_jpeg(image)
+
                     event = self._detect_motion(image)
                     if event:
                         # Emitir evento desde el thread hacia el event loop
@@ -163,6 +179,20 @@ class RTSPAdapter(BaseAdapter):
             if self._running:
                 self.logger.info("Reconectando en 5s...")
                 time.sleep(5)
+
+    def _update_latest_jpeg(self, image: np.ndarray, max_width: int = 640) -> None:
+        """Guarda una copia liviana del frame para el videowall."""
+        try:
+            h, w = image.shape[:2]
+            if w > max_width:
+                scale = max_width / w
+                image = cv2.resize(image, (max_width, int(h * scale)))
+            ok, jpeg = cv2.imencode(".jpg", image, [cv2.IMWRITE_JPEG_QUALITY, 70])
+            if ok:
+                with self._jpeg_lock:
+                    self._latest_jpeg = jpeg.tobytes()
+        except Exception as e:
+            self.logger.debug(f"No se pudo actualizar el frame del videowall: {e}")
 
     def _detect_motion(self, image: np.ndarray) -> Optional[SecurityEvent]:
         """Detección de movimiento local por diferencia de frames."""
