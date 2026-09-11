@@ -35,6 +35,7 @@ class DeviceHealth:
     last_seen: Optional[datetime] = None
     latency_ms: int = 0
     consecutive_failures: int = 0
+    high_latency: bool = False   # evita re-alertar en cada chequeo mientras siga alta
     # Umbrales
     max_latency_ms: int = 500
     max_failures: int = 3   # Fallos consecutivos antes de alertar
@@ -179,6 +180,7 @@ class HealthMonitor:
         if not reachable:
             device.consecutive_failures += 1
             device.latency_ms = 9999
+            device.high_latency = False  # offline manda — evita un "latencia normalizada" falso al reconectar
 
             if device.consecutive_failures == device.max_failures:
                 if device.online:
@@ -196,7 +198,12 @@ class HealthMonitor:
                 device.consecutive_failures = 0
 
             if latency_ms > device.max_latency_ms:
-                await self._alert_high_latency(device, latency_ms)
+                if not device.high_latency:
+                    device.high_latency = True
+                    await self._alert_high_latency(device, latency_ms)
+            elif device.high_latency:
+                device.high_latency = False
+                await self._alert_latency_recovered(device, latency_ms)
 
         logger.debug(
             f"[Health] {device.device_name}: "
@@ -389,6 +396,36 @@ class HealthMonitor:
             latency_ms=latency_ms,
         )
         self._alert_history.append(alert)
+        if self.db:
+            self._save_alert_to_db(alert)
+        if self.notifier:
+            await self.notifier.notify_raw(
+                title=f"🟡 {device.device_name} — latencia elevada",
+                body=msg,
+                severity="medium",
+            )
+
+    async def _alert_latency_recovered(self, device: DeviceHealth, latency_ms: int):
+        msg = f"{device.device_name} — latencia normalizada ({latency_ms}ms)"
+        logger.info(f"[Health] LATENCIA OK: {msg}")
+
+        alert = HealthAlert(
+            device_id=device.device_id,
+            device_name=device.device_name,
+            device_type=device.device_type,
+            alert_type="recovered",
+            message=msg,
+            latency_ms=latency_ms,
+        )
+        self._alert_history.append(alert)
+        if self.db:
+            self._save_alert_to_db(alert)
+        if self.notifier:
+            await self.notifier.notify_raw(
+                title=f"🟢 {device.device_name} — latencia normalizada",
+                body=msg,
+                severity="low",
+            )
 
     async def _alert_system(
         self, component: str, alert_type: str, message: str, severity: str
