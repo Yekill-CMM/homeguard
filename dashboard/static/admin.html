@@ -962,6 +962,7 @@ header {
           <button class="hf-btn" onclick="setHealthFilter('disk',this)">💾 Disco</button>
           <button class="hf-btn" onclick="setHealthFilter('internet',this)">🌐 Internet</button>
           <button class="hf-btn" onclick="setHealthFilter('high_latency',this)">🟡 Latencia</button>
+          <button class="hf-btn" onclick="setHealthFilter('intermittent',this)">⚡ Intermitencia</button>
           <button class="hf-btn" onclick="setHealthFilter('recovered',this)">🟢 Recuperados</button>
         </div>
       </div>
@@ -1929,6 +1930,7 @@ async function loadHealth() {
               <span class="badge" style="color:${statusColor};border-color:${statusColor}20;background:${statusColor}15">
                 ${d.online ? '●' : '○'} ${statusText}
               </span>
+              ${d.intermittent ? `<span class="badge" style="color:var(--amber);border-color:var(--amber)20;background:var(--amber)15">⚡ Intermitente</span>` : ''}
               ${d.failures > 0 ? `<span class="badge badge-off">${d.failures} fallos</span>` : ''}
             </div>
           </div>`;
@@ -1954,6 +1956,7 @@ async function loadHealthLog() {
       offline:      '🔴',
       recovered:    '🟢',
       high_latency: '🟡',
+      intermittent: '⚡',
       disk:         '💾',
       internet:     '🌐',
     };
@@ -1961,6 +1964,7 @@ async function loadHealthLog() {
       offline:      'var(--red)',
       recovered:    'var(--green)',
       high_latency: 'var(--amber)',
+      intermittent: 'var(--amber)',
       disk:         'var(--amber)',
       internet:     'var(--red)',
     };
