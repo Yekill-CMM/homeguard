@@ -21,6 +21,10 @@ logger = logging.getLogger(__name__)
 DISK_WARNING_PCT  = 80   # % uso → WARNING
 DISK_CRITICAL_PCT = 90   # % uso → CRITICAL
 
+# ── Umbrales de intermitencia (cortes repetidos en poco tiempo) ──────────────
+FLAP_WINDOW_SECONDS = 600   # ventana de observación (10 min)
+FLAP_THRESHOLD      = 4     # transiciones online/offline dentro de la ventana
+
 
 @dataclass
 class DeviceHealth:
@@ -36,6 +40,8 @@ class DeviceHealth:
     latency_ms: int = 0
     consecutive_failures: int = 0
     high_latency: bool = False   # evita re-alertar en cada chequeo mientras siga alta
+    intermittent: bool = False   # conexión inestable (varios cortes recientes)
+    transition_times: list = field(default_factory=list)  # timestamps de cambios online/offline
     # Umbrales
     max_latency_ms: int = 500
     max_failures: int = 3   # Fallos consecutivos antes de alertar
@@ -80,6 +86,10 @@ class HealthMonitor:
         self._prev_internet_ok: Optional[bool] = None
         self._prev_disk_status: Optional[str]  = None   # "OK" | "WARNING" | "CRITICAL"
 
+        # Intermitencia de internet (cortes repetidos en poco tiempo)
+        self._internet_transitions: list[float] = []
+        self._internet_intermittent: bool = False
+
         # Crear tabla de log persistente
         if self.db:
             self._ensure_health_events_table()
@@ -108,8 +118,11 @@ class HealthMonitor:
             self._devices[device_id].last_seen = datetime.now()
             self._devices[device_id].consecutive_failures = 0
             if not self._devices[device_id].online:
-                self._devices[device_id].online = True
-                asyncio.create_task(self._alert_recovered(self._devices[device_id]))
+                device = self._devices[device_id]
+                device.online = True
+                self._record_transition(device)
+                asyncio.create_task(self._alert_recovered(device))
+                asyncio.create_task(self._check_flapping(device))
 
     async def start(self):
         """Inicia el monitor en background."""
@@ -126,14 +139,15 @@ class HealthMonitor:
         """Estado actual de todos los dispositivos."""
         return [
             {
-                "device_id":   d.device_id,
-                "device_name": d.device_name,
-                "device_type": d.device_type,
-                "host":        d.host,
-                "online":      d.online,
-                "latency_ms":  d.latency_ms,
-                "last_seen":   d.last_seen.isoformat() if d.last_seen else None,
-                "failures":    d.consecutive_failures,
+                "device_id":    d.device_id,
+                "device_name":  d.device_name,
+                "device_type":  d.device_type,
+                "host":         d.host,
+                "online":       d.online,
+                "latency_ms":   d.latency_ms,
+                "last_seen":    d.last_seen.isoformat() if d.last_seen else None,
+                "failures":     d.consecutive_failures,
+                "intermittent": d.intermittent,
             }
             for d in self._devices.values()
         ]
@@ -185,7 +199,9 @@ class HealthMonitor:
             if device.consecutive_failures == device.max_failures:
                 if device.online:
                     device.online = False
+                    self._record_transition(device)
                     await self._alert_offline(device)
+                    await self._check_flapping(device)
 
         else:
             device.last_seen = datetime.now()
@@ -193,7 +209,9 @@ class HealthMonitor:
             if not device.online:
                 device.online = True
                 device.consecutive_failures = 0
+                self._record_transition(device)
                 await self._alert_recovered(device)
+                await self._check_flapping(device)
             else:
                 device.consecutive_failures = 0
 
@@ -209,6 +227,27 @@ class HealthMonitor:
             f"[Health] {device.device_name}: "
             f"{'OK' if reachable else 'FAIL'} {latency_ms}ms"
         )
+
+    # ── Detección de intermitencia (flapping) ────────────────────────────────
+
+    def _record_transition(self, device: DeviceHealth) -> None:
+        """Registra un cambio online/offline y descarta transiciones fuera de la ventana."""
+        now = time.monotonic()
+        device.transition_times.append(now)
+        device.transition_times = [
+            t for t in device.transition_times if now - t <= FLAP_WINDOW_SECONDS
+        ]
+
+    async def _check_flapping(self, device: DeviceHealth) -> None:
+        """Si un dispositivo acumula demasiados cortes en poco tiempo, alerta intermitencia."""
+        count = len(device.transition_times)
+        if count >= FLAP_THRESHOLD:
+            if not device.intermittent:
+                device.intermittent = True
+                await self._alert_intermittent(device, count)
+        elif device.intermittent:
+            device.intermittent = False
+            await self._alert_intermittent_resolved(device)
 
     async def _ping_tcp(self, host: str, port: int, timeout: float = 3.0) -> bool:
         """Verifica conectividad TCP."""
@@ -254,6 +293,7 @@ class HealthMonitor:
                 message="Conexión a internet perdida — operando en modo offline",
                 severity="high",
             )
+            self._internet_transitions.append(time.monotonic())
         elif not self._prev_internet_ok and ok:
             # Recuperó internet
             logger.info("[Health] ✅ Internet: conexión restaurada")
@@ -263,8 +303,10 @@ class HealthMonitor:
                 message="Conexión a internet restaurada",
                 severity="low",
             )
+            self._internet_transitions.append(time.monotonic())
 
         self._prev_internet_ok = ok
+        await self._check_internet_flapping()
 
     def _internet_reachable(self) -> bool:
         """Bloquea el hilo brevemente; se llama desde executor para no bloquear el loop."""
@@ -283,6 +325,43 @@ class HealthMonitor:
                 return True
         except OSError:
             return False
+
+    async def _check_internet_flapping(self) -> None:
+        """
+        Detecta router/ISP con conexión intermitente: varios cortes de
+        internet en poco tiempo (a diferencia de una caída sostenida).
+        """
+        now = time.monotonic()
+        self._internet_transitions = [
+            t for t in self._internet_transitions if now - t <= FLAP_WINDOW_SECONDS
+        ]
+        count = len(self._internet_transitions)
+
+        if count >= FLAP_THRESHOLD:
+            if not self._internet_intermittent:
+                self._internet_intermittent = True
+                minutes = FLAP_WINDOW_SECONDS // 60
+                msg = (
+                    f"Internet inestable — {count} cortes en los últimos "
+                    f"{minutes} min (posible falla del router o del proveedor)"
+                )
+                logger.warning(f"[Health] ⚡ {msg}")
+                await self._alert_system(
+                    component="internet",
+                    alert_type="intermittent",
+                    message=msg,
+                    severity="high",
+                )
+        elif self._internet_intermittent:
+            self._internet_intermittent = False
+            msg = "Internet — conexión estabilizada"
+            logger.info(f"[Health] ✅ {msg}")
+            await self._alert_system(
+                component="internet",
+                alert_type="recovered",
+                message=msg,
+                severity="low",
+            )
 
     # ── Chequeo de disco ─────────────────────────────────────────────────────
 
@@ -423,6 +502,52 @@ class HealthMonitor:
         if self.notifier:
             await self.notifier.notify_raw(
                 title=f"🟢 {device.device_name} — latencia normalizada",
+                body=msg,
+                severity="low",
+            )
+
+    async def _alert_intermittent(self, device: DeviceHealth, count: int):
+        minutes = FLAP_WINDOW_SECONDS // 60
+        msg = (
+            f"{device.device_name} con conexión intermitente — "
+            f"{count} cortes en los últimos {minutes} min"
+        )
+        logger.warning(f"[Health] INTERMITENTE: {msg}")
+
+        alert = HealthAlert(
+            device_id=device.device_id,
+            device_name=device.device_name,
+            device_type=device.device_type,
+            alert_type="intermittent",
+            message=msg,
+        )
+        self._alert_history.append(alert)
+        if self.db:
+            self._save_alert_to_db(alert)
+        if self.notifier:
+            await self.notifier.notify_raw(
+                title=f"⚡ {device.device_name} — conexión intermitente",
+                body=msg,
+                severity="high",
+            )
+
+    async def _alert_intermittent_resolved(self, device: DeviceHealth):
+        msg = f"{device.device_name} — conexión estabilizada"
+        logger.info(f"[Health] ESTABLE: {msg}")
+
+        alert = HealthAlert(
+            device_id=device.device_id,
+            device_name=device.device_name,
+            device_type=device.device_type,
+            alert_type="recovered",
+            message=msg,
+        )
+        self._alert_history.append(alert)
+        if self.db:
+            self._save_alert_to_db(alert)
+        if self.notifier:
+            await self.notifier.notify_raw(
+                title=f"🟢 {device.device_name} — conexión estabilizada",
                 body=msg,
                 severity="low",
             )

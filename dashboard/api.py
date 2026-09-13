@@ -1194,14 +1194,16 @@ def add_health_routes(app: FastAPI, core):
         if not monitor:
             return {"total": 0, "online": 0, "offline": 0, "warning": 0}
         devices = monitor.get_status()
-        online  = sum(1 for d in devices if d["online"])
-        offline = sum(1 for d in devices if not d["online"])
-        warning = sum(1 for d in devices if d["online"] and d["latency_ms"] > 300)
+        online       = sum(1 for d in devices if d["online"])
+        offline      = sum(1 for d in devices if not d["online"])
+        warning      = sum(1 for d in devices if d["online"] and d["latency_ms"] > 300)
+        intermittent = sum(1 for d in devices if d.get("intermittent"))
         return {
-            "total":   len(devices),
-            "online":  online,
-            "offline": offline,
-            "warning": warning,
+            "total":        len(devices),
+            "online":       online,
+            "offline":      offline,
+            "warning":      warning,
+            "intermittent": intermittent,
         }
 
     @app.get("/api/health/log")
